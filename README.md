@@ -1,0 +1,186 @@
+# Municipal Police and Meter Reading Management System
+
+This is the working system documented in Chapters 1-7: **login and
+role-based access, Police Cases, Fines (issue / pay / printable receipt),
+Meter Readings (capture, with offline support and automatic sync), Damaged
+Meter reports (with photo upload), User account management, and the four
+filterable Reports** from Chapter 4, Section 2.2.
+
+The database is **SQLite by default** - a single file, no separate
+database server to install or configure. All settings (including the
+database driver, if you ever want to switch to MySQL) live in a `.env`
+file that is never uploaded to GitHub.
+
+> Built and reviewed by hand, but **not executed** in the environment this
+> was written in (no PHP available there to run it against). Please test
+> locally and let me know if anything needs fixing - that's the next step.
+
+## 1. Requirements
+
+- XAMPP (or WAMP) with PHP 8.1+ - the bundled `pdo_sqlite` extension is
+  enabled by default, so no extra setup is needed for the database itself.
+- A modern browser (Chrome, Edge, Firefox)
+
+## 2. Setup steps
+
+1. Copy the whole `municipal-system` folder into your XAMPP `htdocs` folder,
+   so the path is `C:\xampp\htdocs\municipal-system` (Windows) or
+   `/opt/lampp/htdocs/municipal-system` (Linux).
+2. Start **Apache** from the XAMPP Control Panel (you do **not** need to
+   start MySQL for the default SQLite setup).
+3. Copy `.env.example` to a new file named `.env` in the same folder.
+   The defaults inside already work out of the box - you only need to
+   change anything if you want to switch to MySQL or add a future API key.
+4. In your browser, go to
+   `http://localhost/municipal-system/setup_database.php` and click through -
+   this creates the SQLite database file and all eight tables for you
+   (there is no phpMyAdmin-style tool for SQLite, so this replaces that step).
+5. Make sure the `data/` and `uploads/damage_photos/` folders are writable
+   (on Linux/Mac: `chmod -R 775 data uploads`). SQLite needs to write to
+   `data/` for every request, not just at setup time.
+6. Go to `http://localhost/municipal-system/setup_admin.php` and create
+   your first Administrator account.
+7. **Delete `setup_admin.php`** once that account is created (it has no
+   protection of its own and should not be left on a live server).
+8. Go to `http://localhost/municipal-system/login.php` and log in.
+9. As Admin, go to **Users > Create User** to add an Officer, MeterReader,
+   Clerk or Supervisor account for testing each role.
+
+### Switching to MySQL instead of SQLite
+
+Open `.env` and set `DB_DRIVER=mysql`, then fill in `DB_HOST`, `DB_NAME`,
+`DB_USER` and `DB_PASS`. You will need to convert `schema.sql` back to
+MySQL syntax first (the version in this repo is SQLite syntax - mainly
+`INTEGER PRIMARY KEY AUTOINCREMENT` instead of `AUTO_INCREMENT`, and `TEXT
+... CHECK (... IN (...))` instead of `ENUM`) and import it via phpMyAdmin.
+
+## 3. Trying it out
+
+Once logged in as Admin, you can:
+
+- **Dashboard** - live counts of open cases, unpaid fines, abnormal
+  readings and pending meter repairs.
+- **Cases > Record a Case** - open a police case; then **Issue Fine**
+  straight from the case list to link a fine to it automatically.
+- **Fines > Record Payment / Print Receipt** - record a payment and open
+  the printable receipt (browser's Print > Save as PDF gives a real PDF).
+- **Meter Readings > Capture Reading** - pick one of the three seeded
+  houses (142, 087, 215); the previous reading auto-fills.
+- **Damaged Meters > Report Damage** - report a fault with an optional
+  photo upload; Admin can then update its repair status.
+- **Users > Create User** - add accounts for each role without touching
+  the database directly.
+- **Reports** - four filterable reports (Cases, Fines, Meter Readings,
+  Damaged Meters), each with a Print button for a clean printed page.
+
+### Testing the offline behaviour
+
+1. Open **Meter Readings > Capture Reading** while online.
+2. In Chrome DevTools, open the **Network** tab and switch it to **Offline**
+   (or simply turn off your Wi-Fi/PC network adapter).
+3. Capture a reading and click **Save Reading** - you'll see the orange
+   "saved on this device" message, and the **Sync Now** counter will show
+   1 pending.
+4. Go back online and click **Sync Now** (or just reload the page) - the
+   reading uploads to the database automatically and disappears from the
+   pending count.
+
+## 4. Accounts and roles
+
+Use **Users > Create User** (Admin only) to create Officer, MeterReader,
+Clerk and Supervisor accounts once you have your first Admin account from
+`setup_admin.php`. There is still no public self-registration screen -
+by design, only an Admin can create accounts (Activity 4, Section 5.2).
+
+## 5. Secrets and .env
+
+Every setting that could vary between your machine and anyone else's -
+or that is genuinely sensitive, like a future SMS gateway key from Chapter
+7's Future Plans - lives in `.env`, never in the PHP source files
+themselves. `config.php` reads `.env` at startup and falls back to safe
+defaults if a value is missing.
+
+`.env` is listed in `.gitignore`, so it will **not** be uploaded to GitHub.
+Only `.env.example` (with blank/placeholder values) is committed, so anyone
+who clones the repository knows what settings exist without ever seeing
+your real values.
+
+## 6. Putting this on GitHub
+
+1. Create a new repository on GitHub (leave it empty - no README/license,
+   since this project already has its own).
+2. From inside the `municipal-system` folder:
+   ```
+   git init
+   git add .
+   git commit -m "Initial commit - core system"
+   git branch -M main
+   git remote add origin https://github.com/<your-username>/<your-repo>.git
+   git push -u origin main
+   ```
+3. Double-check `.env`, `data/*.sqlite` and `uploads/damage_photos/*` did
+   **not** get uploaded (GitHub's file listing should show `.env.example`
+   but not `.env`). `.gitignore` in this project already takes care of this
+   for you - you shouldn't need to do anything extra.
+4. Anyone cloning your repository then follows Section 2 above, starting
+   from "copy `.env.example` to `.env`".
+
+## 7. Folder structure
+
+```
+municipal-system/
+├── .env.example             <- copy to .env (real .env is gitignored)
+├── .gitignore
+├── config.php                <- loads .env, defines constants
+├── schema.sql                <- SQLite schema, run via setup_database.php
+├── setup_database.php        <- creates the SQLite file, run once
+├── setup_admin.php           <- run once, then delete
+├── index.php
+├── login.php / logout.php
+├── dashboard.php
+├── data/                      <- the SQLite database file lives here (gitignored)
+├── includes/
+│   ├── db.php                 <- PDO connection (SQLite or MySQL) + logActivity()
+│   ├── auth.php                <- session guard, roles, lockout
+│   ├── header.php / footer.php
+├── assets/
+│   ├── css/style.css
+│   └── js/
+│       ├── offline-db.js       <- IndexedDB wrapper
+│       └── meter-reading.js    <- capture page logic + sync
+├── cases/
+│   ├── list.php / create.php / update_status.php
+├── fines/
+│   ├── list.php / issue.php / pay.php / receipt.php
+├── meter-readings/
+│   ├── list.php / capture.php
+├── damaged-meters/
+│   ├── list.php / report.php / update_status.php
+├── users/
+│   ├── list.php / create.php
+├── reports/
+│   ├── index.php / cases.php / fines.php / readings.php / damage.php
+├── uploads/damage_photos/     <- photo uploads land here (gitignored)
+└── api/
+    └── save_reading.php        <- JSON endpoint used by the offline JS
+```
+
+## 8. What's built vs. what's still on the roadmap
+
+**Working now:** everything listed in Section 3 above, plus account
+lockout, session timeout, and a full activity log of logins and data
+changes (Chapter 4, Section 5.2).
+
+**Designed in Chapter 4 but not yet built:**
+- A full offline-installable app shell (service worker) - right now the
+  *data* works offline once the Capture Reading page has loaded once, but
+  the page itself still needs one online visit first.
+- Editing/deleting existing records (cases, fines, readings) - everything
+  currently supports create, list, and status/payment updates, not full
+  edit-in-place.
+- An admin screen to review the "possible duplicate" flags raised during
+  meter reading sync (they're currently recorded in ActivityLogs, but
+  there's no dedicated review screen yet).
+
+These are natural next additions on top of the same database and folder
+structure - none of them require changing what has already been built.

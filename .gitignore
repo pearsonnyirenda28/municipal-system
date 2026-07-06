@@ -1,0 +1,25 @@
+# Secrets - never commit your real .env. Commit .env.example instead.
+.env
+
+# The SQLite database file itself - contains real data, not source code.
+# Anyone cloning the repo runs setup_database.php to create their own.
+/data/*.sqlite
+/data/*.sqlite-journal
+/data/*.db
+
+# User-uploaded content - not source code, and photos may contain
+# residents' personal information that shouldn't be in a public repo.
+/uploads/damage_photos/*
+!/uploads/damage_photos/.gitkeep
+
+# One-time setup script - safe to keep locally, but there is no reason
+# to publish it once your own Admin account already exists. Comment
+# this line out if you'd rather keep it in the repo for others.
+# setup_admin.php
+
+# OS / editor noise
+.DS_Store
+Thumbs.db
+*.log
+.vscode/
+.idea/
