@@ -82,8 +82,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             <button type="submit" class="btn" style="width:100%;">Login</button>
         </form>
-
+              <p class="subtitle"> Motto: Ambition · Perseverance · Success  
+    <br>Developer: Bl@de_zar | Pearson Nyirenda </p>
     </div>
 </div>
+
 </body>
+
 </html>

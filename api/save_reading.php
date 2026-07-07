@@ -68,7 +68,7 @@ try {
     // house over the last 6 months (Activity 4, Section 2.3).
     $avgStmt = $db->prepare(
         'SELECT AVG(consumption) AS avg_consumption FROM MeterReadings
-         WHERE house_id = :house_id AND date_taken >= date('now', '-6 months')'
+         WHERE house_id = :house_id AND ' . dbWithinLast('date_taken', 6, 'MONTH')
     );
     $avgStmt->execute(['house_id' => $houseId]);
     $avgConsumption = (float) ($avgStmt->fetch()['avg_consumption'] ?? 0);

@@ -2,14 +2,15 @@
 /**
  * users/create.php
  * Replaces the manual SQL insert described in the original README - now
- * Admins can create Officer, MeterReader, Clerk and Supervisor accounts
+ * Admins can create Officer, MeterReader, Clerk, PoliceSupervisor and
+ * MeterSupervisor accounts
  * (and other Admins) straight from the browser.
  */
 require_once __DIR__ . '/../includes/db.php';
 require_once __DIR__ . '/../includes/auth.php';
 requireRole(['Admin']);
 
-$roles = ['Officer', 'MeterReader', 'Clerk', 'Supervisor', 'Admin'];
+$roles = ['Officer', 'MeterReader', 'Clerk', 'PoliceSupervisor', 'MeterSupervisor', 'Admin'];
 $errors = [];
 $old = ['full_name' => '', 'username' => '', 'role' => ''];
 $success = false;

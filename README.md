@@ -15,6 +15,27 @@ file that is never uploaded to GitHub.
 > was written in (no PHP available there to run it against). Please test
 > locally and let me know if anything needs fixing - that's the next step.
 
+## Recent fixes and additions
+
+- **Fixed a Windows path bug**: `setup_database.php` and the database
+  connection were failing on Windows/XAMPP with "mkdir(): No such file or
+  directory" / "unable to open database file". The cause: PHP's `__DIR__`
+  returns backslash paths on Windows (`C:\xampp\...`), but the old check
+  for "is this already an absolute path?" only recognised forward slashes,
+  so `__DIR__` got prepended a second time, producing a garbled path with
+  a drive letter stuck in the middle. Fixed in `config.php`
+  (`resolveDbPath()`), used consistently by both `db.php` and
+  `setup_database.php` now.
+- **Hamburger menu** for mobile/tablet screens (under ~860px wide) - the
+  top navigation collapses behind a &#9776; button, since officers and
+  meter readers are expected to use this mostly on phones in the field.
+- **Police and meter-reading supervisors are now separate roles**
+  (`PoliceSupervisor` / `MeterSupervisor`, not one generic `Supervisor`).
+  A police supervisor's dashboard, menu, and reports only ever show case
+  and fine data; a meter-reading supervisor's only ever show meter reading
+  and damaged-meter data - each is blind to the other's domain, not just
+  in the menu but in what the dashboard actually queries.
+
 ## 1. Requirements
 
 - XAMPP (or WAMP) with PHP 8.1+ - the bundled `pdo_sqlite` extension is
@@ -44,7 +65,7 @@ file that is never uploaded to GitHub.
    protection of its own and should not be left on a live server).
 8. Go to `http://localhost/municipal-system/login.php` and log in.
 9. As Admin, go to **Users > Create User** to add an Officer, MeterReader,
-   Clerk or Supervisor account for testing each role.
+   Clerk, PoliceSupervisor or MeterSupervisor account for testing each role.
 
 ### Switching to MySQL instead of SQLite
 
@@ -88,11 +109,48 @@ Once logged in as Admin, you can:
 ## 4. Accounts and roles
 
 Use **Users > Create User** (Admin only) to create Officer, MeterReader,
-Clerk and Supervisor accounts once you have your first Admin account from
+Clerk, PoliceSupervisor and MeterSupervisor accounts once you have your first Admin account from
 `setup_admin.php`. There is still no public self-registration screen -
 by design, only an Admin can create accounts (Activity 4, Section 5.2).
 
-## 5. Secrets and .env
+## 5. Moving to MySQL for production
+
+SQLite (the default) is great for development and for a small single-server
+setup, but if you want **MySQL as the main, central database** - for
+example once this goes on a live host, or if the municipality's IT
+department already runs MySQL - here's how to move everything across:
+
+1. Create a MySQL database and import the MySQL-flavoured schema:
+   ```
+   mysql -u root -p -e "CREATE DATABASE municipal_system"
+   mysql -u root -p municipal_system < schema.mysql.sql
+   ```
+   (or use phpMyAdmin's Import tab with `schema.mysql.sql` - `schema.sql`
+   is the SQLite version and won't work against MySQL.)
+2. In `.env`, fill in `DB_HOST`, `DB_NAME`, `DB_USER`, `DB_PASS` for that
+   MySQL database. Leave `DB_DRIVER=sqlite` for now.
+3. Visit `migrate_to_mysql.php` in your browser and click **Start
+   Migration**. It copies every row from your local SQLite file into
+   MySQL, table by table, in the right order so foreign keys line up,
+   and re-syncs MySQL's auto-increment counters afterwards so new
+   records don't collide with the migrated ones.
+4. Once that finishes cleanly, change `.env` to `DB_DRIVER=mysql`. From
+   that point on, the app reads and writes MySQL as the main database -
+   your SQLite file is left untouched (nothing is deleted), so there's
+   a safety net if you ever need to check something against it.
+
+The migration script is safe to run more than once - it uses
+`INSERT IGNORE`, so anything already copied across is simply skipped the
+second time rather than duplicated.
+
+**Why the app can switch drivers at all:** a small number of SQL date
+functions differ between SQLite and MySQL (e.g. "readings from the last
+30 days"). Those are isolated into two helper functions in `includes/db.php`
+(`dbCurrentMonthMatch()` and `dbWithinLast()`) that return the correct SQL
+for whichever `DB_DRIVER` is active, so the rest of the codebase - every
+page, every query - is identical regardless of which database is behind it.
+
+## 6. Secrets and .env
 
 Every setting that could vary between your machine and anyone else's -
 or that is genuinely sensitive, like a future SMS gateway key from Chapter
@@ -105,7 +163,7 @@ Only `.env.example` (with blank/placeholder values) is committed, so anyone
 who clones the repository knows what settings exist without ever seeing
 your real values.
 
-## 6. Putting this on GitHub
+## 7. Putting this on GitHub
 
 1. Create a new repository on GitHub (leave it empty - no README/license,
    since this project already has its own).
@@ -125,7 +183,7 @@ your real values.
 4. Anyone cloning your repository then follows Section 2 above, starting
    from "copy `.env.example` to `.env`".
 
-## 7. Folder structure
+## 8. Folder structure
 
 ```
 municipal-system/
@@ -133,21 +191,24 @@ municipal-system/
 ├── .gitignore
 ├── config.php                <- loads .env, defines constants
 ├── schema.sql                <- SQLite schema, run via setup_database.php
+├── schema.mysql.sql           <- MySQL schema, for production (Section 5)
 ├── setup_database.php        <- creates the SQLite file, run once
 ├── setup_admin.php           <- run once, then delete
+├── migrate_to_mysql.php       <- one-time SQLite -> MySQL data migration
 ├── index.php
 ├── login.php / logout.php
 ├── dashboard.php
 ├── data/                      <- the SQLite database file lives here (gitignored)
 ├── includes/
-│   ├── db.php                 <- PDO connection (SQLite or MySQL) + logActivity()
+│   ├── db.php                 <- PDO connection (SQLite or MySQL) + logActivity() + date-SQL helpers
 │   ├── auth.php                <- session guard, roles, lockout
 │   ├── header.php / footer.php
 ├── assets/
 │   ├── css/style.css
 │   └── js/
 │       ├── offline-db.js       <- IndexedDB wrapper
-│       └── meter-reading.js    <- capture page logic + sync
+│       ├── meter-reading.js    <- capture page logic + sync
+│       └── nav.js               <- hamburger menu toggle
 ├── cases/
 │   ├── list.php / create.php / update_status.php
 ├── fines/
@@ -165,7 +226,7 @@ municipal-system/
     └── save_reading.php        <- JSON endpoint used by the offline JS
 ```
 
-## 8. What's built vs. what's still on the roadmap
+## 9. What's built vs. what's still on the roadmap
 
 **Working now:** everything listed in Section 3 above, plus account
 lockout, session timeout, and a full activity log of logins and data

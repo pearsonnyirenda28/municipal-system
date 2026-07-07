@@ -47,12 +47,34 @@ function env(string $key, $default = null)
 // Set DB_DRIVER=mysql in .env if you would rather point this at MySQL.
 // ------------------------------------------------------------
 define('DB_DRIVER', env('DB_DRIVER', 'sqlite'));
-define('DB_PATH', env('DB_PATH', __DIR__ . '/data/municipal_system.sqlite'));
+define('DB_PATH', env('DB_PATH', 'data/municipal_system.sqlite'));
 
 define('DB_HOST', env('DB_HOST', 'localhost'));
 define('DB_NAME', env('DB_NAME', 'municipal_system'));
 define('DB_USER', env('DB_USER', 'root'));
 define('DB_PASS', env('DB_PASS', ''));
+
+/**
+ * Resolves DB_PATH into a real filesystem path, correctly, on both
+ * Windows and Linux/Mac.
+ *
+ * The bug this fixes: PHP's __DIR__ on Windows returns backslashes
+ * (e.g. C:\xampp\htdocs\municipal-system). The old check here only
+ * recognised an absolute path if it started with "C:/" (forward slash).
+ * A Windows absolute path like "C:\xampp\..." was treated as *relative*,
+ * so __DIR__ got prepended a second time, producing a garbled path with
+ * a drive letter stuck in the middle - which is what caused the
+ * "mkdir(): No such file or directory" / "unable to open database file"
+ * errors.
+ */
+function resolveDbPath(string $path): string
+{
+    // Already absolute? Unix root (/...), Windows drive (C:\ or C:/), or UNC (\\server\share)
+    if (preg_match('#^(/|[a-zA-Z]:[\\\\/]|\\\\\\\\)#', $path)) {
+        return $path;
+    }
+    return __DIR__ . DIRECTORY_SEPARATOR . $path;
+}
 
 define('APP_NAME', 'Municipal Police and Meter Reading Management System');
 define('APP_ENV', env('APP_ENV', 'local'));

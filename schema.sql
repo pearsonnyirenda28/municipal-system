@@ -18,7 +18,7 @@ CREATE TABLE IF NOT EXISTS Users (
     user_id        INTEGER PRIMARY KEY AUTOINCREMENT,
     username       TEXT NOT NULL UNIQUE,
     password_hash  TEXT NOT NULL,
-    role           TEXT NOT NULL CHECK (role IN ('Admin','Officer','MeterReader','Clerk','Supervisor')),
+    role           TEXT NOT NULL CHECK (role IN ('Admin','Officer','MeterReader','Clerk','PoliceSupervisor','MeterSupervisor')),
     full_name      TEXT NOT NULL,
     created_at     TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
