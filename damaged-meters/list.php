@@ -10,6 +10,8 @@ requireRole(['Admin', 'MeterReader']);
 $db = getDb();
 $statusFilter = $_GET['status'] ?? '';
 $search = trim($_GET['q'] ?? '');
+$from = $_GET['from'] ?? '';
+$to = $_GET['to'] ?? '';
 
 $where = [];
 $params = [];
@@ -20,6 +22,14 @@ if (in_array($statusFilter, ['Pending', 'In Progress', 'Fixed'], true)) {
 if ($search !== '') {
     $where[] = '(h.house_number LIKE :q OR h.ward LIKE :q OR d.description LIKE :q)';
     $params['q'] = "%{$search}%";
+}
+if ($from !== '') {
+    $where[] = 'd.date_reported >= :from';
+    $params['from'] = $from;
+}
+if ($to !== '') {
+    $where[] = 'd.date_reported <= :to';
+    $params['to'] = $to;
 }
 $whereSql = $where ? ' WHERE ' . implode(' AND ', $where) : '';
 
@@ -37,6 +47,8 @@ $stmt = $db->prepare($sql);
 $stmt->execute($params);
 $reports = $stmt->fetchAll();
 
+$hasFilters = $statusFilter || $search || $from || $to;
+
 require __DIR__ . '/../includes/header.php';
 ?>
 
@@ -48,15 +60,33 @@ require __DIR__ . '/../includes/header.php';
     <a class="btn amber" href="report.php">+ Report Damage</a>
 </div>
 
-<?= renderSearchBox('Search by house, ward or description...') ?>
-
-<p>
-    Filter:
-    <a href="<?= htmlspecialchars(pageUrl(['status' => null, 'page' => null])) ?>" class="btn secondary">All</a>
-    <a href="<?= htmlspecialchars(pageUrl(['status' => 'Pending', 'page' => null])) ?>" class="btn secondary">Pending</a>
-    <a href="<?= htmlspecialchars(pageUrl(['status' => 'In Progress', 'page' => null])) ?>" class="btn secondary">In Progress</a>
-    <a href="<?= htmlspecialchars(pageUrl(['status' => 'Fixed', 'page' => null])) ?>" class="btn secondary">Fixed</a>
-</p>
+<div class="filter-bar">
+    <form method="get" class="filter-row">
+        <div class="filter-field grow">
+            <label for="q">Search</label>
+            <input type="text" id="q" name="q" placeholder="House, ward or description..." value="<?= htmlspecialchars($search) ?>">
+        </div>
+        <div class="filter-field">
+            <label for="status">Status</label>
+            <select id="status" name="status">
+                <option value="">All</option>
+                <?php foreach (['Pending', 'In Progress', 'Fixed'] as $s): ?>
+                    <option value="<?= $s ?>" <?= $statusFilter === $s ? 'selected' : '' ?>><?= $s ?></option>
+                <?php endforeach; ?>
+            </select>
+        </div>
+        <div class="filter-field">
+            <label for="from">Reported from</label>
+            <input type="date" id="from" name="from" value="<?= htmlspecialchars($from) ?>">
+        </div>
+        <div class="filter-field">
+            <label for="to">Reported to</label>
+            <input type="date" id="to" name="to" value="<?= htmlspecialchars($to) ?>">
+        </div>
+        <button type="submit" class="btn">Apply Filters</button>
+        <?php if ($hasFilters): ?><a href="list.php" class="btn secondary">Clear</a><?php endif; ?>
+    </form>
+</div>
 
 <div class="table-responsive">
 <table class="data-table">

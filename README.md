@@ -74,6 +74,15 @@ file that is never uploaded to GitHub.
   PoliceSupervisor/MeterSupervisor data separation above).
 - Assorted mobile spacing fixes (login box, form panels, page headers)
   that were technically responsive before but cramped on a small phone.
+- **Version 2.0 is now complete.** The two items left open last round:
+  - **Login history** (`users/login_history.php`, Admin only) - every
+    successful login, failed attempt, and logout was already being
+    written to `ActivityLogs`; this gives it a proper screen, filterable
+    by outcome, user, and date range, with IP address shown per event.
+  - **Advanced filters**: every list page (Cases, Fines, Meter Readings,
+    Damaged Meters, Users) now has a real multi-field filter bar - date
+    ranges, status/role/ward dropdowns, and search, all combined in one
+    form - instead of the single-click status-only links from before.
 
 ## 1. Requirements
 
@@ -258,7 +267,7 @@ municipal-system/
 ├── damaged-meters/
 │   ├── list.php / report.php / update_status.php
 ├── users/
-│   ├── list.php / create.php
+│   ├── list.php / create.php / login_history.php
 ├── reports/
 │   ├── index.php / cases.php / fines.php / readings.php / damage.php
 ├── uploads/damage_photos/     <- photo uploads land here (gitignored)

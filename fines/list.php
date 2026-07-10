@@ -9,6 +9,8 @@ requireRole(['Admin', 'Officer', 'Clerk']);
 
 $db = getDb();
 $statusFilter = $_GET['status'] ?? '';
+$from = $_GET['from'] ?? '';
+$to = $_GET['to'] ?? '';
 $search = trim($_GET['q'] ?? '');
 
 $where = [];
@@ -16,6 +18,14 @@ $params = [];
 if (in_array($statusFilter, ['Unpaid', 'Paid'], true)) {
     $where[] = 'payment_status = :status';
     $params['status'] = $statusFilter;
+}
+if ($from !== '') {
+    $where[] = 'date_issued >= :from';
+    $params['from'] = $from;
+}
+if ($to !== '') {
+    $where[] = 'date_issued <= :to_end';
+    $params['to_end'] = $to . ' 23:59:59';
 }
 if ($search !== '') {
     $where[] = '(offender_name LIKE :q OR fine_number LIKE :q OR house_number LIKE :q OR vehicle_plate LIKE :q)';
@@ -28,6 +38,8 @@ $pageInfo = paginate($db, "SELECT COUNT(*) FROM Fines{$whereSql}", $params);
 $stmt = $db->prepare("SELECT * FROM Fines{$whereSql} ORDER BY date_issued DESC LIMIT {$pageInfo['perPage']} OFFSET {$pageInfo['offset']}");
 $stmt->execute($params);
 $fines = $stmt->fetchAll();
+
+$hasFilters = $statusFilter || $from || $to || $search;
 
 require __DIR__ . '/../includes/header.php';
 ?>
@@ -42,14 +54,32 @@ require __DIR__ . '/../includes/header.php';
     <?php endif; ?>
 </div>
 
-<?= renderSearchBox('Search by offender, fine no., house or plate...') ?>
-
-<p>
-    Filter:
-    <a href="<?= htmlspecialchars(pageUrl(['status' => null, 'page' => null])) ?>" class="btn secondary">All</a>
-    <a href="<?= htmlspecialchars(pageUrl(['status' => 'Unpaid', 'page' => null])) ?>" class="btn secondary">Unpaid</a>
-    <a href="<?= htmlspecialchars(pageUrl(['status' => 'Paid', 'page' => null])) ?>" class="btn secondary">Paid</a>
-</p>
+<div class="filter-bar">
+    <form method="get" class="filter-row">
+        <div class="filter-field grow">
+            <label for="q">Search</label>
+            <input type="text" id="q" name="q" placeholder="Offender, fine no., house or plate..." value="<?= htmlspecialchars($search) ?>">
+        </div>
+        <div class="filter-field">
+            <label for="status">Status</label>
+            <select id="status" name="status">
+                <option value="">All</option>
+                <option value="Unpaid" <?= $statusFilter === 'Unpaid' ? 'selected' : '' ?>>Unpaid</option>
+                <option value="Paid" <?= $statusFilter === 'Paid' ? 'selected' : '' ?>>Paid</option>
+            </select>
+        </div>
+        <div class="filter-field">
+            <label for="from">Issued from</label>
+            <input type="date" id="from" name="from" value="<?= htmlspecialchars($from) ?>">
+        </div>
+        <div class="filter-field">
+            <label for="to">Issued to</label>
+            <input type="date" id="to" name="to" value="<?= htmlspecialchars($to) ?>">
+        </div>
+        <button type="submit" class="btn">Apply Filters</button>
+        <?php if ($hasFilters): ?><a href="list.php" class="btn secondary">Clear</a><?php endif; ?>
+    </form>
+</div>
 
 <div class="table-responsive">
 <table class="data-table">

@@ -11,13 +11,30 @@ requireRole(['Admin', 'Officer']);
 
 $db = getDb();
 $statusFilter = $_GET['status'] ?? '';
+$officerFilter = $_GET['officer_id'] ?? '';
+$from = $_GET['from'] ?? '';
+$to = $_GET['to'] ?? '';
 $search = trim($_GET['q'] ?? '');
+
+$officers = $db->query("SELECT user_id, full_name FROM Users WHERE role = 'Officer' ORDER BY full_name")->fetchAll();
 
 $where = [];
 $params = [];
 if (in_array($statusFilter, ['Open', 'In Progress', 'Closed'], true)) {
     $where[] = 'c.status = :status';
     $params['status'] = $statusFilter;
+}
+if ($officerFilter !== '') {
+    $where[] = 'c.officer_id = :officer_id';
+    $params['officer_id'] = $officerFilter;
+}
+if ($from !== '') {
+    $where[] = 'c.date_opened >= :from';
+    $params['from'] = $from;
+}
+if ($to !== '') {
+    $where[] = 'c.date_opened <= :to';
+    $params['to'] = $to;
 }
 if ($search !== '') {
     $where[] = '(c.offender_name LIKE :q OR c.case_number LIKE :q OR c.offence_type LIKE :q)';
@@ -34,6 +51,8 @@ $stmt = $db->prepare($sql);
 $stmt->execute($params);
 $cases = $stmt->fetchAll();
 
+$hasFilters = $statusFilter || $officerFilter || $from || $to || $search;
+
 require __DIR__ . '/../includes/header.php';
 ?>
 
@@ -45,15 +64,42 @@ require __DIR__ . '/../includes/header.php';
     <a class="btn" href="create.php">+ Record a Case</a>
 </div>
 
-<?= renderSearchBox('Search by offender, case no. or offence...') ?>
-
-<p>
-    Filter:
-    <a href="<?= htmlspecialchars(pageUrl(['status' => null, 'page' => null])) ?>" class="btn secondary">All</a>
-    <a href="<?= htmlspecialchars(pageUrl(['status' => 'Open', 'page' => null])) ?>" class="btn secondary">Open</a>
-    <a href="<?= htmlspecialchars(pageUrl(['status' => 'In Progress', 'page' => null])) ?>" class="btn secondary">In Progress</a>
-    <a href="<?= htmlspecialchars(pageUrl(['status' => 'Closed', 'page' => null])) ?>" class="btn secondary">Closed</a>
-</p>
+<div class="filter-bar">
+    <form method="get" class="filter-row">
+        <div class="filter-field grow">
+            <label for="q">Search</label>
+            <input type="text" id="q" name="q" placeholder="Offender, case no. or offence..." value="<?= htmlspecialchars($search) ?>">
+        </div>
+        <div class="filter-field">
+            <label for="status">Status</label>
+            <select id="status" name="status">
+                <option value="">All</option>
+                <?php foreach (['Open', 'In Progress', 'Closed'] as $s): ?>
+                    <option value="<?= $s ?>" <?= $statusFilter === $s ? 'selected' : '' ?>><?= $s ?></option>
+                <?php endforeach; ?>
+            </select>
+        </div>
+        <div class="filter-field">
+            <label for="officer_id">Officer</label>
+            <select id="officer_id" name="officer_id">
+                <option value="">All</option>
+                <?php foreach ($officers as $o): ?>
+                    <option value="<?= (int) $o['user_id'] ?>" <?= (string) $officerFilter === (string) $o['user_id'] ? 'selected' : '' ?>><?= htmlspecialchars($o['full_name']) ?></option>
+                <?php endforeach; ?>
+            </select>
+        </div>
+        <div class="filter-field">
+            <label for="from">Opened from</label>
+            <input type="date" id="from" name="from" value="<?= htmlspecialchars($from) ?>">
+        </div>
+        <div class="filter-field">
+            <label for="to">Opened to</label>
+            <input type="date" id="to" name="to" value="<?= htmlspecialchars($to) ?>">
+        </div>
+        <button type="submit" class="btn">Apply Filters</button>
+        <?php if ($hasFilters): ?><a href="list.php" class="btn secondary">Clear</a><?php endif; ?>
+    </form>
+</div>
 
 <div class="table-responsive">
 <table class="data-table">

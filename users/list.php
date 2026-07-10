@@ -10,12 +10,18 @@ requireRole(['Admin']);
 
 $db = getDb();
 $search = trim($_GET['q'] ?? '');
+$roleFilter = $_GET['role'] ?? '';
+$allRoles = ['Officer', 'MeterReader', 'Clerk', 'PoliceSupervisor', 'MeterSupervisor', 'Admin'];
 
 $where = [];
 $params = [];
 if ($search !== '') {
-    $where[] = '(full_name LIKE :q OR username LIKE :q OR role LIKE :q)';
+    $where[] = '(full_name LIKE :q OR username LIKE :q)';
     $params['q'] = "%{$search}%";
+}
+if (in_array($roleFilter, $allRoles, true)) {
+    $where[] = 'role = :role';
+    $params['role'] = $roleFilter;
 }
 $whereSql = $where ? ' WHERE ' . implode(' AND ', $where) : '';
 
@@ -28,6 +34,8 @@ $stmt = $db->prepare(
 $stmt->execute($params);
 $users = $stmt->fetchAll();
 
+$hasFilters = $search || $roleFilter;
+
 require __DIR__ . '/../includes/header.php';
 ?>
 
@@ -36,10 +44,31 @@ require __DIR__ . '/../includes/header.php';
         <h1>User Accounts</h1>
         <p class="subtitle"><?= (int) $pageInfo['total'] ?> account(s) with access to the system.</p>
     </div>
-    <a class="btn" href="create.php">+ Create User</a>
+    <div>
+        <a class="btn secondary" href="login_history.php">Login History</a>
+        <a class="btn" href="create.php">+ Create User</a>
+    </div>
 </div>
 
-<?= renderSearchBox('Search by name, username or role...') ?>
+<div class="filter-bar">
+    <form method="get" class="filter-row">
+        <div class="filter-field grow">
+            <label for="q">Search</label>
+            <input type="text" id="q" name="q" placeholder="Name or username..." value="<?= htmlspecialchars($search) ?>">
+        </div>
+        <div class="filter-field">
+            <label for="role">Role</label>
+            <select id="role" name="role">
+                <option value="">All</option>
+                <?php foreach ($allRoles as $r): ?>
+                    <option value="<?= $r ?>" <?= $roleFilter === $r ? 'selected' : '' ?>><?= $r ?></option>
+                <?php endforeach; ?>
+            </select>
+        </div>
+        <button type="submit" class="btn">Apply Filters</button>
+        <?php if ($hasFilters): ?><a href="list.php" class="btn secondary">Clear</a><?php endif; ?>
+    </form>
+</div>
 
 <div class="table-responsive">
 <table class="data-table">

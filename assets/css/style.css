@@ -276,6 +276,31 @@ table.data-table tr:hover td { background: #FAFBFC; }
 }
 .search-box .btn, .search-box .btn.secondary { margin-top: 0; white-space: nowrap; }
 
+/* ---------- filter bar (advanced filters: date range, dropdowns, search) ---------- */
+
+.filter-bar {
+    background: #fff;
+    padding: 16px 18px;
+    border-radius: 10px;
+    margin-bottom: 18px;
+    box-shadow: 0 2px 8px rgba(22, 34, 62, 0.08);
+}
+.filter-bar .filter-row {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+    align-items: flex-end;
+}
+.filter-bar .filter-field { display: flex; flex-direction: column; min-width: 150px; }
+.filter-bar .filter-field label { margin: 0 0 5px; font-size: 0.8rem; }
+.filter-bar .filter-field.grow { flex: 1; min-width: 200px; }
+.filter-bar .btn, .filter-bar .btn.secondary { margin-top: 0; white-space: nowrap; }
+
+@media (max-width: 860px) {
+    .filter-bar .filter-row { flex-direction: column; align-items: stretch; }
+    .filter-bar .filter-field { min-width: 0; }
+}
+
 /* ---------- pagination ---------- */
 
 .pagination {

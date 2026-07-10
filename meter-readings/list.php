@@ -9,7 +9,12 @@ requireRole(['Admin', 'MeterReader']);
 
 $db = getDb();
 $search = trim($_GET['q'] ?? '');
+$wardFilter = $_GET['ward'] ?? '';
 $abnormalOnly = ($_GET['abnormal'] ?? '') === '1';
+$from = $_GET['from'] ?? '';
+$to = $_GET['to'] ?? '';
+
+$wards = $db->query('SELECT DISTINCT ward FROM Houses ORDER BY ward')->fetchAll(PDO::FETCH_COLUMN);
 
 $where = [];
 $params = [];
@@ -17,8 +22,20 @@ if ($search !== '') {
     $where[] = '(h.house_number LIKE :q OR h.ward LIKE :q)';
     $params['q'] = "%{$search}%";
 }
+if ($wardFilter !== '') {
+    $where[] = 'h.ward = :ward';
+    $params['ward'] = $wardFilter;
+}
 if ($abnormalOnly) {
     $where[] = 'r.is_abnormal = 1';
+}
+if ($from !== '') {
+    $where[] = 'r.date_taken >= :from';
+    $params['from'] = $from;
+}
+if ($to !== '') {
+    $where[] = 'r.date_taken <= :to';
+    $params['to'] = $to;
 }
 $whereSql = $where ? ' WHERE ' . implode(' AND ', $where) : '';
 
@@ -36,6 +53,8 @@ $stmt = $db->prepare($sql);
 $stmt->execute($params);
 $readings = $stmt->fetchAll();
 
+$hasFilters = $search || $wardFilter || $abnormalOnly || $from || $to;
+
 require __DIR__ . '/../includes/header.php';
 ?>
 
@@ -47,13 +66,40 @@ require __DIR__ . '/../includes/header.php';
     <a class="btn amber" href="capture.php">+ Capture Reading</a>
 </div>
 
-<?= renderSearchBox('Search by house number or ward...') ?>
-
-<p>
-    Filter:
-    <a href="<?= htmlspecialchars(pageUrl(['abnormal' => null, 'page' => null])) ?>" class="btn secondary">All</a>
-    <a href="<?= htmlspecialchars(pageUrl(['abnormal' => '1', 'page' => null])) ?>" class="btn secondary">Abnormal only</a>
-</p>
+<div class="filter-bar">
+    <form method="get" class="filter-row">
+        <div class="filter-field grow">
+            <label for="q">Search</label>
+            <input type="text" id="q" name="q" placeholder="House number or ward..." value="<?= htmlspecialchars($search) ?>">
+        </div>
+        <div class="filter-field">
+            <label for="ward">Ward</label>
+            <select id="ward" name="ward">
+                <option value="">All</option>
+                <?php foreach ($wards as $w): ?>
+                    <option value="<?= htmlspecialchars($w) ?>" <?= $wardFilter === $w ? 'selected' : '' ?>><?= htmlspecialchars($w) ?></option>
+                <?php endforeach; ?>
+            </select>
+        </div>
+        <div class="filter-field">
+            <label for="from">Taken from</label>
+            <input type="date" id="from" name="from" value="<?= htmlspecialchars($from) ?>">
+        </div>
+        <div class="filter-field">
+            <label for="to">Taken to</label>
+            <input type="date" id="to" name="to" value="<?= htmlspecialchars($to) ?>">
+        </div>
+        <div class="filter-field">
+            <label for="abnormal">&nbsp;</label>
+            <label style="font-weight:normal;display:flex;align-items:center;gap:6px;height:38px;">
+                <input type="checkbox" id="abnormal" name="abnormal" value="1" style="width:auto;" <?= $abnormalOnly ? 'checked' : '' ?>>
+                Abnormal only
+            </label>
+        </div>
+        <button type="submit" class="btn">Apply Filters</button>
+        <?php if ($hasFilters): ?><a href="list.php" class="btn secondary">Clear</a><?php endif; ?>
+    </form>
+</div>
 
 <div class="table-responsive">
 <table class="data-table">

@@ -8,7 +8,12 @@
  *   1. Build the WHERE clause (filters + search) as SQL + a params array.
  *   2. paginate($db, $countSql, $params, $perPage) -> current page, total
  *      pages, and the LIMIT/OFFSET to add to the real SELECT.
- *   3. renderSearchBox() / renderPagination() to draw the controls.
+ *   3. renderPagination() to draw the page links.
+ *
+ * Most list pages build their own <form method="get" class="filter-bar">
+ * combining search + dropdowns + date range in one form (see cases/list.php
+ * for the reference pattern). renderSearchBox() below is a simpler
+ * search-only alternative, kept for anywhere a full filter bar isn't needed.
  */
 
 const DEFAULT_PAGE_SIZE = 15;
