@@ -73,15 +73,43 @@ CREATE TABLE IF NOT EXISTS Payments (
 );
 
 -- ------------------------------------------------------------
+-- Wards
+-- Version 2.5: wards are now a real managed entity, not a free-text
+-- field on Houses.
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS Wards (
+    ward_id      INTEGER PRIMARY KEY AUTOINCREMENT,
+    ward_name    TEXT NOT NULL UNIQUE,
+    description  TEXT NULL
+);
+
+-- ------------------------------------------------------------
+-- WardAssignments
+-- Many-to-many: a meter reader can cover more than one ward, and a
+-- ward can have more than one reader assigned to it.
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS WardAssignments (
+    assignment_id  INTEGER PRIMARY KEY AUTOINCREMENT,
+    ward_id        INTEGER NOT NULL,
+    user_id        INTEGER NOT NULL,
+    assigned_at    TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (ward_id) REFERENCES Wards(ward_id) ON DELETE CASCADE,
+    FOREIGN KEY (user_id) REFERENCES Users(user_id) ON DELETE CASCADE,
+    UNIQUE (ward_id, user_id)
+);
+
+-- ------------------------------------------------------------
 -- Houses
 -- ------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS Houses (
     house_id       INTEGER PRIMARY KEY AUTOINCREMENT,
     house_number   TEXT NOT NULL,
-    ward           TEXT NOT NULL,
+    street         TEXT NULL,
+    ward_id        INTEGER NULL,
     owner_name     TEXT NOT NULL,
     meter_number   TEXT NOT NULL UNIQUE,
-    address        TEXT NULL
+    address        TEXT NULL,
+    FOREIGN KEY (ward_id) REFERENCES Wards(ward_id) ON DELETE SET NULL
 );
 
 -- ------------------------------------------------------------
@@ -132,15 +160,22 @@ CREATE TABLE IF NOT EXISTS ActivityLogs (
 );
 
 -- ============================================================
--- Seed data - sample houses so Meter Readings has something to pick
--- from. No Users are seeded here; run setup_admin.php once in the
--- browser to create the first Administrator account (see README.md).
+-- Seed data - sample wards and houses so Wards, Houses and Meter
+-- Readings all have something to work with out of the box. No Users
+-- are seeded here; run setup_admin.php once in the browser to create
+-- the first Administrator account (see README.md).
 -- ============================================================
 
-INSERT OR IGNORE INTO Houses (house_number, ward, owner_name, meter_number, address) VALUES
-    ('142', 'Ward 3', 'T. Moyo',   'MTR-0142', '142 Beitbridge North'),
-    ('087', 'Ward 1', 'S. Ncube',  'MTR-0087', '87 Dulivhadzimu'),
-    ('215', 'Ward 3', 'P. Dube',   'MTR-0215', '215 Beitbridge North');
+INSERT OR IGNORE INTO Wards (ward_name, description) VALUES
+    ('Ward 1', 'Dulivhadzimu area'),
+    ('Ward 3', 'Beitbridge North area');
+
+INSERT OR IGNORE INTO Houses (house_number, street, ward_id, owner_name, meter_number, address)
+SELECT '142', 'North Road', ward_id, 'T. Moyo', 'MTR-0142', '142 Beitbridge North' FROM Wards WHERE ward_name = 'Ward 3'
+UNION ALL
+SELECT '087', 'Dulivhadzimu Street', ward_id, 'S. Ncube', 'MTR-0087', '87 Dulivhadzimu' FROM Wards WHERE ward_name = 'Ward 1'
+UNION ALL
+SELECT '215', 'North Road', ward_id, 'P. Dube', 'MTR-0215', '215 Beitbridge North' FROM Wards WHERE ward_name = 'Ward 3';
 
 -- Give the sample houses a starting reading so consumption can be
 -- calculated the first time each is read through the system.

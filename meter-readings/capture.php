@@ -15,10 +15,29 @@ require_once __DIR__ . '/../includes/auth.php';
 requireRole(['Admin', 'MeterReader']);
 
 $db = getDb();
+$user = currentUser();
+
+// Version 2.5: a MeterReader only ever sees houses in wards they're
+// assigned to - Admin still sees every house, unrestricted.
+$where = '';
+$params = [];
+if ($user['role'] === 'MeterReader') {
+    $wardIds = getAssignedWardIds($db, $user['id']);
+    if ($wardIds) {
+        $placeholders = implode(',', array_fill(0, count($wardIds), '?'));
+        $where = "WHERE h.ward_id IN ({$placeholders})";
+        $params = $wardIds;
+    } else {
+        // Not assigned to any ward yet - show nothing rather than
+        // everything, so an unassigned reader can't read a house that
+        // isn't theirs to read.
+        $where = 'WHERE 1=0';
+    }
+}
 
 // Every house plus its most recent reading, embedded for offline use.
-$houses = $db->query(
-    'SELECT h.house_id, h.house_number, h.ward,
+$stmt = $db->prepare(
+    "SELECT h.house_id, h.house_number, h.street, w.ward_name,
             COALESCE(
                 (SELECT current_reading FROM MeterReadings r
                  WHERE r.house_id = h.house_id
@@ -26,8 +45,12 @@ $houses = $db->query(
                 0
             ) AS last_reading
      FROM Houses h
-     ORDER BY h.house_number'
-)->fetchAll();
+     LEFT JOIN Wards w ON w.ward_id = h.ward_id
+     {$where}
+     ORDER BY h.house_number"
+);
+$stmt->execute($params);
+$houses = $stmt->fetchAll();
 
 require __DIR__ . '/../includes/header.php';
 ?>
@@ -44,6 +67,13 @@ require __DIR__ . '/../includes/header.php';
 <div id="formAlert"></div>
 
 <div class="form-panel">
+    <?php if (!$houses): ?>
+        <div class="alert warning">
+            <?= $user['role'] === 'MeterReader'
+                ? "You aren't assigned to any ward yet, so there are no houses to show. Ask an Administrator to assign you to a ward under Wards &rarr; Assign Readers."
+                : "No houses have been added yet." ?>
+        </div>
+    <?php endif; ?>
     <label for="houseSelect">House number</label>
     <select id="houseSelect">
         <option value="">-- Select a house --</option>
@@ -51,7 +81,7 @@ require __DIR__ . '/../includes/header.php';
             <option value="<?= (int) $h['house_id'] ?>"
                     data-previous="<?= htmlspecialchars((string) $h['last_reading']) ?>"
                     data-house-number="<?= htmlspecialchars($h['house_number']) ?>">
-                <?= htmlspecialchars($h['house_number']) ?> (<?= htmlspecialchars($h['ward']) ?>)
+                <?= htmlspecialchars($h['house_number']) ?><?= $h['street'] ? ', ' . htmlspecialchars($h['street']) : '' ?> (<?= htmlspecialchars($h['ward_name'] ?? 'No ward') ?>)
             </option>
         <?php endforeach; ?>
     </select>

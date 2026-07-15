@@ -8,37 +8,54 @@ require_once __DIR__ . '/../includes/pagination.php';
 requireRole(['Admin', 'MeterReader']);
 
 $db = getDb();
+$user = currentUser();
 $statusFilter = $_GET['status'] ?? '';
 $search = trim($_GET['q'] ?? '');
 $from = $_GET['from'] ?? '';
 $to = $_GET['to'] ?? '';
 
+// Version 2.5: scope to the reader's assigned wards, same as everywhere else.
+$assignedWardIds = $user['role'] === 'MeterReader' ? getAssignedWardIds($db, (int) $user['id']) : null;
+
 $where = [];
 $params = [];
+
+if ($assignedWardIds !== null) {
+    if ($assignedWardIds) {
+        $placeholders = implode(',', array_fill(0, count($assignedWardIds), '?'));
+        $where[] = "h.ward_id IN ({$placeholders})";
+        $params = array_merge($params, $assignedWardIds);
+    } else {
+        $where[] = '1=0';
+    }
+}
 if (in_array($statusFilter, ['Pending', 'In Progress', 'Fixed'], true)) {
-    $where[] = 'd.repair_status = :status';
-    $params['status'] = $statusFilter;
+    $where[] = 'd.repair_status = ?';
+    $params[] = $statusFilter;
 }
 if ($search !== '') {
-    $where[] = '(h.house_number LIKE :q OR h.ward LIKE :q OR d.description LIKE :q)';
-    $params['q'] = "%{$search}%";
+    $where[] = '(h.house_number LIKE ? OR w.ward_name LIKE ? OR d.description LIKE ?)';
+    $params[] = "%{$search}%";
+    $params[] = "%{$search}%";
+    $params[] = "%{$search}%";
 }
 if ($from !== '') {
-    $where[] = 'd.date_reported >= :from';
-    $params['from'] = $from;
+    $where[] = 'd.date_reported >= ?';
+    $params[] = $from;
 }
 if ($to !== '') {
-    $where[] = 'd.date_reported <= :to';
-    $params['to'] = $to;
+    $where[] = 'd.date_reported <= ?';
+    $params[] = $to;
 }
 $whereSql = $where ? ' WHERE ' . implode(' AND ', $where) : '';
 
-$countSql = "SELECT COUNT(*) FROM DamagedMeters d JOIN Houses h ON h.house_id = d.house_id{$whereSql}";
+$joinSql = 'FROM DamagedMeters d JOIN Houses h ON h.house_id = d.house_id LEFT JOIN Wards w ON w.ward_id = h.ward_id';
+
+$countSql = "SELECT COUNT(*) {$joinSql}{$whereSql}";
 $pageInfo = paginate($db, $countSql, $params);
 
-$sql = "SELECT d.*, h.house_number, h.ward, u.full_name AS reported_by_name
-        FROM DamagedMeters d
-        JOIN Houses h ON h.house_id = d.house_id
+$sql = "SELECT d.*, h.house_number, w.ward_name, u.full_name AS reported_by_name
+        {$joinSql}
         LEFT JOIN Users u ON u.user_id = d.reported_by
         {$whereSql}
         ORDER BY d.date_reported DESC
@@ -59,6 +76,10 @@ require __DIR__ . '/../includes/header.php';
     </div>
     <a class="btn amber" href="report.php">+ Report Damage</a>
 </div>
+
+<?php if ($assignedWardIds !== null && !$assignedWardIds): ?>
+    <div class="alert warning">You aren't assigned to any ward yet - ask an Administrator to assign you one.</div>
+<?php endif; ?>
 
 <div class="filter-bar">
     <form method="get" class="filter-row">
@@ -100,7 +121,7 @@ require __DIR__ . '/../includes/header.php';
         <?php foreach ($reports as $r): ?>
             <tr>
                 <td><?= htmlspecialchars($r['house_number']) ?></td>
-                <td><?= htmlspecialchars($r['ward']) ?></td>
+                <td><?= htmlspecialchars($r['ward_name'] ?? '-') ?></td>
                 <td><?= htmlspecialchars($r['description']) ?></td>
                 <td>
                     <?php if ($r['photo_path']): ?>

@@ -9,7 +9,29 @@ require_once __DIR__ . '/../includes/auth.php';
 requireRole(['Admin', 'MeterReader']);
 
 $db = getDb();
-$houses = $db->query('SELECT house_id, house_number, ward FROM Houses ORDER BY house_number')->fetchAll();
+$user = currentUser();
+
+// Version 2.5: a MeterReader only reports damage against houses in
+// wards they're assigned to - Admin sees every house.
+$where = '';
+$params = [];
+if ($user['role'] === 'MeterReader') {
+    $wardIds = getAssignedWardIds($db, (int) $user['id']);
+    if ($wardIds) {
+        $placeholders = implode(',', array_fill(0, count($wardIds), '?'));
+        $where = "WHERE h.ward_id IN ({$placeholders})";
+        $params = $wardIds;
+    } else {
+        $where = 'WHERE 1=0';
+    }
+}
+$stmt = $db->prepare(
+    "SELECT h.house_id, h.house_number, h.street, w.ward_name
+     FROM Houses h LEFT JOIN Wards w ON w.ward_id = h.ward_id
+     {$where} ORDER BY h.house_number"
+);
+$stmt->execute($params);
+$houses = $stmt->fetchAll();
 
 $errors = [];
 $old = ['house_id' => '', 'description' => ''];
@@ -96,6 +118,13 @@ require __DIR__ . '/../includes/header.php';
 <?php endif; ?>
 
 <div class="form-panel">
+    <?php if (!$houses): ?>
+        <div class="alert warning">
+            <?= $user['role'] === 'MeterReader'
+                ? "You aren't assigned to any ward yet, so there are no houses to report against. Ask an Administrator to assign you to a ward."
+                : "No houses have been added yet." ?>
+        </div>
+    <?php endif; ?>
     <form method="post" enctype="multipart/form-data">
         <?= csrfField() ?>
         <label for="house_id">House</label>
@@ -103,7 +132,7 @@ require __DIR__ . '/../includes/header.php';
             <option value="">-- Select a house --</option>
             <?php foreach ($houses as $h): ?>
                 <option value="<?= (int) $h['house_id'] ?>" <?= (string) $old['house_id'] === (string) $h['house_id'] ? 'selected' : '' ?>>
-                    <?= htmlspecialchars($h['house_number']) ?> (<?= htmlspecialchars($h['ward']) ?>)
+                    <?= htmlspecialchars($h['house_number']) ?> (<?= htmlspecialchars($h['ward_name'] ?? 'No ward') ?>)
                 </option>
             <?php endforeach; ?>
         </select>

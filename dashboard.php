@@ -32,6 +32,38 @@ if ($showMeter) {
     $pendingRepairs   = $db->query("SELECT COUNT(*) c FROM DamagedMeters WHERE repair_status != 'Fixed'")->fetch();
 }
 
+// Version 2.5 - Meter Reader Dashboard: daily workload, progress, and
+// remaining houses, scoped to this reader's own assigned wards only.
+$readerWorkload = null;
+if ($role === 'MeterReader') {
+    $wardIds = getAssignedWardIds($db, (int) $user['id']);
+    if ($wardIds) {
+        $placeholders = implode(',', array_fill(0, count($wardIds), '?'));
+
+        $stmt = $db->prepare("SELECT COUNT(*) FROM Houses WHERE ward_id IN ({$placeholders})");
+        $stmt->execute($wardIds);
+        $totalHouses = (int) $stmt->fetchColumn();
+
+        $stmt = $db->prepare(
+            "SELECT COUNT(DISTINCT house_id) FROM MeterReadings
+             WHERE date_taken = CURRENT_DATE AND house_id IN (
+                 SELECT house_id FROM Houses WHERE ward_id IN ({$placeholders})
+             )"
+        );
+        $stmt->execute($wardIds);
+        $readToday = (int) $stmt->fetchColumn();
+
+        $readerWorkload = [
+            'wardCount' => count($wardIds),
+            'totalHouses' => $totalHouses,
+            'readToday' => $readToday,
+            'remaining' => max(0, $totalHouses - $readToday),
+        ];
+    } else {
+        $readerWorkload = ['wardCount' => 0, 'totalHouses' => 0, 'readToday' => 0, 'remaining' => 0];
+    }
+}
+
 // Recent Activity widget: Admin sees the whole system's recent activity;
 // everyone else sees only their own - a supervisor never sees another
 // role's activity feed, consistent with the rest of this dashboard.
@@ -80,6 +112,21 @@ require __DIR__ . '/includes/header.php';
         </div>
     <?php endif; ?>
 
+    <?php if ($readerWorkload !== null): ?>
+        <div class="stat-card">
+            <div class="stat-value"><?= $readerWorkload['totalHouses'] ?></div>
+            <div class="stat-label">Houses across your <?= $readerWorkload['wardCount'] ?> ward(s)</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value"><?= $readerWorkload['readToday'] ?></div>
+            <div class="stat-label">Read today</div>
+        </div>
+        <div class="stat-card amber">
+            <div class="stat-value"><?= $readerWorkload['remaining'] ?></div>
+            <div class="stat-label">Remaining today</div>
+        </div>
+    <?php endif; ?>
+
     <?php if ($showMeter): ?>
         <div class="stat-card amber">
             <div class="stat-value"><?= (int) $abnormalReadings['c'] ?></div>
@@ -91,6 +138,21 @@ require __DIR__ . '/includes/header.php';
         </div>
     <?php endif; ?>
 </div>
+
+<?php if ($readerWorkload !== null && $readerWorkload['totalHouses'] > 0): ?>
+    <?php $pct = (int) round(($readerWorkload['readToday'] / $readerWorkload['totalHouses']) * 100); ?>
+    <div class="form-panel" style="max-width:none;margin-bottom:26px;">
+        <p style="margin:0 0 8px;font-size:0.9rem;"><strong>Today's progress:</strong> <?= $readerWorkload['readToday'] ?> of <?= $readerWorkload['totalHouses'] ?> houses (<?= $pct ?>%)</p>
+        <div style="background:#E1E6ED;border-radius:8px;height:14px;overflow:hidden;">
+            <div style="background:#2C7873;height:100%;width:<?= $pct ?>%;"></div>
+        </div>
+    </div>
+<?php elseif ($readerWorkload !== null && $readerWorkload['totalHouses'] === 0): ?>
+    <div class="alert warning" style="margin-bottom:26px;">
+        You aren't assigned to any ward yet, so there's no workload to show. Ask an Administrator to
+        assign you to a ward under Wards &rarr; Assign Readers.
+    </div>
+<?php endif; ?>
 
 <h2>Quick actions</h2>
 <div class="card-grid">

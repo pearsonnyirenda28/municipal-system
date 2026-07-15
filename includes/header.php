@@ -14,6 +14,7 @@ $user = currentUser();
 $menus = [
     'Admin'            => [['dashboard.php', 'Dashboard'], ['cases/list.php', 'Cases'], ['fines/list.php', 'Fines'],
                             ['meter-readings/list.php', 'Meter Readings'], ['damaged-meters/list.php', 'Damaged Meters'],
+                            ['wards/list.php', 'Wards'], ['houses/list.php', 'Houses'],
                             ['reports/index.php', 'Reports'], ['users/list.php', 'Users']],
     'Officer'          => [['dashboard.php', 'Dashboard'], ['cases/list.php', 'Cases'], ['fines/list.php', 'Fines']],
     'MeterReader'      => [['dashboard.php', 'Dashboard'], ['meter-readings/list.php', 'Meter Readings'],

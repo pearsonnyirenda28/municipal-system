@@ -11,7 +11,7 @@ $status = $_GET['status'] ?? '';
 $houseId = $_GET['house_id'] ?? '';
 $houses = $db->query('SELECT house_id, house_number FROM Houses ORDER BY house_number')->fetchAll();
 
-$sql = 'SELECT d.*, h.house_number, h.ward FROM DamagedMeters d JOIN Houses h ON h.house_id = d.house_id WHERE 1=1';
+$sql = 'SELECT d.*, h.house_number, w.ward_name FROM DamagedMeters d JOIN Houses h ON h.house_id = d.house_id LEFT JOIN Wards w ON w.ward_id = h.ward_id WHERE 1=1';
 $params = [];
 if (in_array($status, ['Pending', 'In Progress', 'Fixed'], true)) { $sql .= ' AND d.repair_status = :status'; $params['status'] = $status; }
 if ($houseId !== '') { $sql .= ' AND d.house_id = :house_id'; $params['house_id'] = $houseId; }
@@ -55,7 +55,7 @@ require __DIR__ . '/../includes/header.php';
         <?php foreach ($rows as $r): ?>
             <tr>
                 <td><?= htmlspecialchars($r['house_number']) ?></td>
-                <td><?= htmlspecialchars($r['ward']) ?></td>
+                <td><?= htmlspecialchars($r['ward_name'] ?? '-') ?></td>
                 <td><?= htmlspecialchars($r['description']) ?></td>
                 <td><?= htmlspecialchars($r['repair_status']) ?></td>
                 <td><?= htmlspecialchars(date('d M Y', strtotime($r['date_reported']))) ?></td>

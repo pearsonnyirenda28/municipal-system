@@ -78,15 +78,43 @@ CREATE TABLE IF NOT EXISTS Payments (
 ) ENGINE=InnoDB;
 
 -- ------------------------------------------------------------
+-- Wards
+-- Version 2.5: wards are now a real managed entity, not a free-text
+-- field on Houses.
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS Wards (
+    ward_id      INT AUTO_INCREMENT PRIMARY KEY,
+    ward_name    VARCHAR(30) NOT NULL UNIQUE,
+    description  VARCHAR(150) NULL
+) ENGINE=InnoDB;
+
+-- ------------------------------------------------------------
+-- WardAssignments
+-- Many-to-many: a meter reader can cover more than one ward, and a
+-- ward can have more than one reader assigned to it.
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS WardAssignments (
+    assignment_id  INT AUTO_INCREMENT PRIMARY KEY,
+    ward_id        INT NOT NULL,
+    user_id        INT NOT NULL,
+    assigned_at    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (ward_id) REFERENCES Wards(ward_id) ON DELETE CASCADE,
+    FOREIGN KEY (user_id) REFERENCES Users(user_id) ON DELETE CASCADE,
+    UNIQUE KEY uniq_ward_user (ward_id, user_id)
+) ENGINE=InnoDB;
+
+-- ------------------------------------------------------------
 -- Houses
 -- ------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS Houses (
     house_id       INT AUTO_INCREMENT PRIMARY KEY,
     house_number   VARCHAR(15) NOT NULL,
-    ward           VARCHAR(10) NOT NULL,
+    street         VARCHAR(80) NULL,
+    ward_id        INT NULL,
     owner_name     VARCHAR(60) NOT NULL,
     meter_number   VARCHAR(20) NOT NULL UNIQUE,
-    address        VARCHAR(100) NULL
+    address        VARCHAR(100) NULL,
+    FOREIGN KEY (ward_id) REFERENCES Wards(ward_id) ON DELETE SET NULL
 ) ENGINE=InnoDB;
 
 -- ------------------------------------------------------------
@@ -143,7 +171,13 @@ CREATE TABLE IF NOT EXISTS ActivityLogs (
 -- across with it, and inserting these first would create duplicates.
 -- ============================================================
 
-INSERT IGNORE INTO Houses (house_number, ward, owner_name, meter_number, address) VALUES
-    ('142', 'Ward 3', 'T. Moyo',   'MTR-0142', '142 Beitbridge North'),
-    ('087', 'Ward 1', 'S. Ncube',  'MTR-0087', '87 Dulivhadzimu'),
-    ('215', 'Ward 3', 'P. Dube',   'MTR-0215', '215 Beitbridge North');
+INSERT IGNORE INTO Wards (ward_name, description) VALUES
+    ('Ward 1', 'Dulivhadzimu area'),
+    ('Ward 3', 'Beitbridge North area');
+
+INSERT IGNORE INTO Houses (house_number, street, ward_id, owner_name, meter_number, address)
+SELECT '142', 'North Road', ward_id, 'T. Moyo', 'MTR-0142', '142 Beitbridge North' FROM Wards WHERE ward_name = 'Ward 3'
+UNION ALL
+SELECT '087', 'Dulivhadzimu Street', ward_id, 'S. Ncube', 'MTR-0087', '87 Dulivhadzimu' FROM Wards WHERE ward_name = 'Ward 1'
+UNION ALL
+SELECT '215', 'North Road', ward_id, 'P. Dube', 'MTR-0215', '215 Beitbridge North' FROM Wards WHERE ward_name = 'Ward 3';

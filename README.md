@@ -83,6 +83,39 @@ file that is never uploaded to GitHub.
     Damaged Meters, Users) now has a real multi-field filter bar - date
     ranges, status/role/ward dropdowns, and search, all combined in one
     form - instead of the single-click status-only links from before.
+- **Version 2.5 - Ward-Based Operations is now complete.**
+  - **Wards are a real managed entity now**, not a free-text field on
+    Houses. New `Wards` and `WardAssignments` tables; `wards/list.php`
+    and `wards/create.php` (Admin) manage wards, `wards/assign.php`
+    assigns/unassigns meter readers to a ward (many-to-many - a reader
+    can cover more than one ward).
+  - **A whole new Houses module** (`houses/`) - there was no house
+    management UI at all before this, only seed data. `houses/list.php`
+    (filter by ward and street, search, paginated), `houses/create.php`
+    and `houses/edit.php` (each house picks its ward from a dropdown, not
+    free text), and `houses/bulk_assign.php` - the "bulk assignment
+    tools" requirement - filter down a list of houses and move all of
+    them to a different ward in one save.
+  - **Meter readers now only see their own wards.** Not just filtered in
+    the UI - the underlying queries in `meter-readings/capture.php`,
+    `meter-readings/list.php`, `damaged-meters/report.php`, and
+    `damaged-meters/list.php` all scope to `getAssignedWardIds()`
+    (`includes/db.php`) for the `MeterReader` role. A reader assigned to
+    no ward sees an explicit "ask your Administrator" message rather than
+    either an empty page or, worse, every house in the system.
+  - **Reader dashboard**: daily workload, a progress bar, and remaining
+    houses for the day, scoped to the reader's own assigned wards.
+  - **Existing SQLite databases upgrade automatically.** Since
+    `CREATE TABLE IF NOT EXISTS` can't add columns to a table that
+    already exists, `setup_database.php` now also runs a one-time,
+    repeatable migration (`migrateWardColumns()`) that adds the new
+    `street`/`ward_id` columns to an existing `Houses` table, turns every
+    distinct old free-text ward value into a real row in `Wards`, and
+    points each house at the right one - nothing is deleted, safe to run
+    again, and does nothing on a database that's already been migrated.
+  - `schema.mysql.sql` and `migrate_to_mysql.php` were updated to match
+    (both new tables added, `Houses` column list updated, dependency
+    order preserved so `Wards` migrates before `Houses`).
 
 ## 1. Requirements
 
@@ -139,8 +172,20 @@ Once logged in as Admin, you can:
   photo upload; Admin can then update its repair status.
 - **Users > Create User** - add accounts for each role without touching
   the database directly.
+- **Wards > Create Ward** - two sample wards (Ward 1, Ward 3) already
+  exist from setup; **Wards > Assign Readers** ties a MeterReader account
+  to one or more wards.
+- **Houses > Add House / Bulk Assign to Ward** - three sample houses
+  exist already, each in one of the two sample wards.
 - **Reports** - four filterable reports (Cases, Fines, Meter Readings,
   Damaged Meters), each with a Print button for a clean printed page.
+
+**Important if you're testing as a MeterReader:** that role now only
+sees houses in wards it's been assigned to (Version 2.5). Create a
+MeterReader account, then go to **Wards > Assign Readers** as Admin and
+tick that account for at least one ward - otherwise Meter Readings and
+Damaged Meters will correctly, but perhaps confusingly at first, show
+"you aren't assigned to any ward yet" instead of the sample houses.
 
 ### Testing the offline behaviour
 
@@ -266,6 +311,10 @@ municipal-system/
 │   ├── list.php / capture.php
 ├── damaged-meters/
 │   ├── list.php / report.php / update_status.php
+├── wards/
+│   ├── list.php / create.php / assign.php
+├── houses/
+│   ├── list.php / create.php / edit.php / bulk_assign.php
 ├── users/
 │   ├── list.php / create.php / login_history.php
 ├── reports/
@@ -285,12 +334,23 @@ changes (Chapter 4, Section 5.2).
 - A full offline-installable app shell (service worker) - right now the
   *data* works offline once the Capture Reading page has loaded once, but
   the page itself still needs one online visit first.
-- Editing/deleting existing records (cases, fines, readings) - everything
-  currently supports create, list, and status/payment updates, not full
+- Editing/deleting existing records - Houses now has a proper edit screen
+  (`houses/edit.php`, Version 2.5), but Cases, Fines and Meter Readings
+  still only support create, list, and status/payment updates, not full
   edit-in-place.
 - An admin screen to review the "possible duplicate" flags raised during
   meter reading sync (they're currently recorded in ActivityLogs, but
   there's no dedicated review screen yet).
+
+**Version 2.0 and 2.5 (mobile/security and ward-based operations) are
+both complete** - see the changelog at the top of this file for the full
+list. **Not yet started:** Version 3.0's guided field operations
+(house-to-house navigation, per-visit status like pending/skipped/vacant/
+locked/illegal-connection instead of just the current abnormal flag) and
+everything from Version 3.5 onward (richer offline sync with device IDs
+and retry counts, the full installable PWA, supervisor progress/assignment
+tools beyond the current dashboard widget, and the enterprise-tier
+features - PDF/Excel export, analytics, a REST API, 2FA).
 
 **Found during this security pass, not yet fixed:**
 - `setup_database.php`, `setup_admin.php`, and `migrate_to_mysql.php` are

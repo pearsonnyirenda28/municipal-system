@@ -35,7 +35,9 @@ $ran = false;
 // never point at a row that hasn't been copied across yet.
 $tables = [
     'Users'          => ['user_id', 'username', 'password_hash', 'role', 'full_name', 'created_at'],
-    'Houses'         => ['house_id', 'house_number', 'ward', 'owner_name', 'meter_number', 'address'],
+    'Wards'          => ['ward_id', 'ward_name', 'description'],
+    'WardAssignments' => ['assignment_id', 'ward_id', 'user_id', 'assigned_at'],
+    'Houses'         => ['house_id', 'house_number', 'street', 'ward_id', 'owner_name', 'meter_number', 'address'],
     'Cases'          => ['case_id', 'case_number', 'offender_name', 'id_number', 'offence_type',
                           'description', 'status', 'officer_id', 'date_opened'],
     'Fines'          => ['fine_id', 'fine_number', 'case_id', 'offender_name', 'house_number',
@@ -51,7 +53,8 @@ $tables = [
 // Primary key column per table, used afterwards to re-sync MySQL's
 // AUTO_INCREMENT counter so new rows don't collide with migrated IDs.
 $primaryKeys = [
-    'Users' => 'user_id', 'Houses' => 'house_id', 'Cases' => 'case_id', 'Fines' => 'fine_id',
+    'Users' => 'user_id', 'Wards' => 'ward_id', 'WardAssignments' => 'assignment_id',
+    'Houses' => 'house_id', 'Cases' => 'case_id', 'Fines' => 'fine_id',
     'Payments' => 'payment_id', 'MeterReadings' => 'reading_id', 'DamagedMeters' => 'damage_id',
     'ActivityLogs' => 'log_id',
 ];

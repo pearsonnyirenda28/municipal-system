@@ -37,6 +37,18 @@ function dbWithinLast(string $column, int $amount, string $unit = 'DAY'): string
     return "{$column} >= date('now', '-{$amount} {$sqliteUnit}')";
 }
 
+/**
+ * Version 2.5: which wards is this meter reader assigned to? Returns an
+ * empty array for anyone who isn't a MeterReader (Admin isn't scoped by
+ * ward at all - it sees everything, checked separately by each caller).
+ */
+function getAssignedWardIds(PDO $db, int $userId): array
+{
+    $stmt = $db->prepare('SELECT ward_id FROM WardAssignments WHERE user_id = :uid');
+    $stmt->execute(['uid' => $userId]);
+    return array_map('intval', $stmt->fetchAll(PDO::FETCH_COLUMN));
+}
+
 function getDb(): PDO
 {
     static $pdo = null;

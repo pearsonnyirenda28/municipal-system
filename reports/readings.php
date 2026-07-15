@@ -7,17 +7,21 @@ require_once __DIR__ . '/../includes/auth.php';
 requireRole(['Admin', 'MeterSupervisor']);
 
 $db = getDb();
-$ward = $_GET['ward'] ?? '';
+$wardFilter = $_GET['ward_id'] ?? '';
 $houseId = $_GET['house_id'] ?? '';
 $from = $_GET['from'] ?? '';
 $to = $_GET['to'] ?? '';
 
-$wards = $db->query('SELECT DISTINCT ward FROM Houses ORDER BY ward')->fetchAll(PDO::FETCH_COLUMN);
+$wards = $db->query('SELECT ward_id, ward_name FROM Wards ORDER BY ward_name')->fetchAll();
 $houses = $db->query('SELECT house_id, house_number FROM Houses ORDER BY house_number')->fetchAll();
 
-$sql = 'SELECT r.*, h.house_number, h.ward FROM MeterReadings r JOIN Houses h ON h.house_id = r.house_id WHERE 1=1';
+$sql = 'SELECT r.*, h.house_number, w.ward_name
+        FROM MeterReadings r
+        JOIN Houses h ON h.house_id = r.house_id
+        LEFT JOIN Wards w ON w.ward_id = h.ward_id
+        WHERE 1=1';
 $params = [];
-if ($ward !== '') { $sql .= ' AND h.ward = :ward'; $params['ward'] = $ward; }
+if ($wardFilter !== '') { $sql .= ' AND h.ward_id = :ward_id'; $params['ward_id'] = $wardFilter; }
 if ($houseId !== '') { $sql .= ' AND r.house_id = :house_id'; $params['house_id'] = $houseId; }
 if ($from) { $sql .= ' AND r.date_taken >= :from'; $params['from'] = $from; }
 if ($to)   { $sql .= ' AND r.date_taken <= :to'; $params['to'] = $to; }
@@ -35,9 +39,9 @@ require __DIR__ . '/../includes/header.php';
 <form method="get" class="no-print" style="background:#fff;padding:18px;border-radius:10px;margin-bottom:20px;box-shadow:0 2px 8px rgba(22,34,62,0.08);">
     <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-end;">
         <div><label>Ward</label>
-            <select name="ward">
+            <select name="ward_id">
                 <option value="">All</option>
-                <?php foreach ($wards as $w): ?><option value="<?= htmlspecialchars($w) ?>" <?= $ward === $w ? 'selected' : '' ?>><?= htmlspecialchars($w) ?></option><?php endforeach; ?>
+                <?php foreach ($wards as $w): ?><option value="<?= (int) $w['ward_id'] ?>" <?= (string) $wardFilter === (string) $w['ward_id'] ? 'selected' : '' ?>><?= htmlspecialchars($w['ward_name']) ?></option><?php endforeach; ?>
             </select>
         </div>
         <div><label>House</label>
@@ -61,7 +65,7 @@ require __DIR__ . '/../includes/header.php';
         <?php foreach ($rows as $r): ?>
             <tr>
                 <td><?= htmlspecialchars($r['house_number']) ?></td>
-                <td><?= htmlspecialchars($r['ward']) ?></td>
+                <td><?= htmlspecialchars($r['ward_name'] ?? '-') ?></td>
                 <td><?= number_format((float) $r['previous_reading'], 2) ?></td>
                 <td><?= number_format((float) $r['current_reading'], 2) ?></td>
                 <td><?= number_format((float) $r['consumption'], 2) ?> m&sup3;</td>
