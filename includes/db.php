@@ -49,6 +49,68 @@ function getAssignedWardIds(PDO $db, int $userId): array
     return array_map('intval', $stmt->fetchAll(PDO::FETCH_COLUMN));
 }
 
+/**
+ * Version 3.0 - Guided Field Operations: the reader's ordered "round" for
+ * a given day - every house in scope, walking order (street, then house
+ * number), each tagged with today's visit status ('Pending' if nothing
+ * has been recorded yet). Pass $wardIds = null for an unrestricted round
+ * (Admin); pass an array (possibly empty) to scope to those wards only.
+ */
+function getReaderRound(PDO $db, ?array $wardIds, int $readerId, string $date): array
+{
+    $whereWard = '';
+    $wardParams = [];
+    if ($wardIds !== null) {
+        if (!$wardIds) {
+            return [];
+        }
+        $placeholders = implode(',', array_fill(0, count($wardIds), '?'));
+        $whereWard = "WHERE h.ward_id IN ({$placeholders})";
+        $wardParams = $wardIds;
+    }
+
+    $sql = "SELECT h.house_id, h.house_number, h.street, w.ward_name,
+                   COALESCE(v.status, 'Pending') AS visit_status
+            FROM Houses h
+            LEFT JOIN Wards w ON w.ward_id = h.ward_id
+            LEFT JOIN HouseVisits v ON v.house_id = h.house_id AND v.reader_id = ? AND v.visit_date = ?
+            {$whereWard}
+            ORDER BY h.street, h.house_number, h.house_id";
+
+    $stmt = $db->prepare($sql);
+    $stmt->execute(array_merge([$readerId, $date], $wardParams));
+    return $stmt->fetchAll();
+}
+
+/**
+ * Records or updates today's visit status for one house. Used both by
+ * the explicit status buttons (Skip/Vacant/Locked/...) and, indirectly,
+ * by a successful meter reading save (status becomes 'Completed').
+ * A plain check-then-insert-or-update rather than SQLite's
+ * "ON CONFLICT" or MySQL's "ON DUPLICATE KEY" - avoids yet another pair
+ * of driver-specific SQL dialects for one simple operation.
+ */
+function upsertHouseVisit(PDO $db, int $houseId, int $readerId, string $date, string $status, ?int $readingId = null, ?string $notes = null): void
+{
+    $check = $db->prepare('SELECT visit_id FROM HouseVisits WHERE house_id = :h AND reader_id = :r AND visit_date = :d');
+    $check->execute(['h' => $houseId, 'r' => $readerId, 'd' => $date]);
+    $existing = $check->fetch();
+
+    if ($existing) {
+        $stmt = $db->prepare(
+            'UPDATE HouseVisits SET status = :status, reading_id = :reading_id, notes = :notes, updated_at = CURRENT_TIMESTAMP
+             WHERE visit_id = :id'
+        );
+        $stmt->execute(['status' => $status, 'reading_id' => $readingId, 'notes' => $notes, 'id' => $existing['visit_id']]);
+    } else {
+        $stmt = $db->prepare(
+            'INSERT INTO HouseVisits (house_id, reader_id, visit_date, status, reading_id, notes)
+             VALUES (:h, :r, :d, :status, :reading_id, :notes)'
+        );
+        $stmt->execute(['h' => $houseId, 'r' => $readerId, 'd' => $date, 'status' => $status, 'reading_id' => $readingId, 'notes' => $notes]);
+    }
+}
+
 function getDb(): PDO
 {
     static $pdo = null;

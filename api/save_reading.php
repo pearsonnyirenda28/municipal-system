@@ -105,6 +105,13 @@ try {
 
     $db->commit();
 
+    // Version 3.0: a successful reading marks today's visit to this house
+    // as Completed - this is the single point both the online-direct save
+    // and the later offline sync both pass through, so guided navigation
+    // progress updates correctly either way (immediately when online,
+    // once synced when it was captured offline).
+    upsertHouseVisit($db, $houseId, (int) $_SESSION['user_id'], $dateTaken, 'Completed', (int) $db->lastInsertId());
+
     $logMsg = "Captured meter reading for house_id {$houseId} ({$current} m3)";
     if ($possibleDuplicate) {
         $logMsg .= ' - POSSIBLE DUPLICATE, flagged for admin review';

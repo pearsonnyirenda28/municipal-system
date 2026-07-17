@@ -153,6 +153,27 @@ CREATE TABLE IF NOT EXISTS DamagedMeters (
 ) ENGINE=InnoDB;
 
 -- ------------------------------------------------------------
+-- HouseVisits
+-- Version 3.0 - Guided Field Operations. One row per house per reader
+-- per day, tracking where that house stands in today's round.
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS HouseVisits (
+    visit_id     INT AUTO_INCREMENT PRIMARY KEY,
+    house_id     INT NOT NULL,
+    reader_id    INT NOT NULL,
+    visit_date   DATE NOT NULL,
+    status       ENUM('Pending','Completed','Skipped','DamagedMeter','Vacant',
+                       'Locked','IllegalConnection','RevisitRequired') NOT NULL DEFAULT 'Pending',
+    reading_id   INT NULL,
+    notes        VARCHAR(200) NULL,
+    updated_at   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (house_id) REFERENCES Houses(house_id) ON DELETE CASCADE,
+    FOREIGN KEY (reader_id) REFERENCES Users(user_id) ON DELETE CASCADE,
+    FOREIGN KEY (reading_id) REFERENCES MeterReadings(reading_id) ON DELETE SET NULL,
+    UNIQUE KEY uniq_house_reader_date (house_id, reader_id, visit_date)
+) ENGINE=InnoDB;
+
+-- ------------------------------------------------------------
 -- ActivityLogs
 -- ------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS ActivityLogs (

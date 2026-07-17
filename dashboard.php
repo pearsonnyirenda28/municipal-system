@@ -32,36 +32,30 @@ if ($showMeter) {
     $pendingRepairs   = $db->query("SELECT COUNT(*) c FROM DamagedMeters WHERE repair_status != 'Fixed'")->fetch();
 }
 
-// Version 2.5 - Meter Reader Dashboard: daily workload, progress, and
-// remaining houses, scoped to this reader's own assigned wards only.
+// Version 3.0 - Meter Reader Dashboard: daily workload, progress,
+// remaining houses, and a full reading-statistics breakdown, all scoped
+// to this reader's own assigned wards, using the same getReaderRound()
+// the guided navigator itself uses (one source of truth for "today").
 $readerWorkload = null;
 if ($role === 'MeterReader') {
     $wardIds = getAssignedWardIds($db, (int) $user['id']);
-    if ($wardIds) {
-        $placeholders = implode(',', array_fill(0, count($wardIds), '?'));
+    $round = getReaderRound($db, $wardIds, (int) $user['id'], date('Y-m-d'));
 
-        $stmt = $db->prepare("SELECT COUNT(*) FROM Houses WHERE ward_id IN ({$placeholders})");
-        $stmt->execute($wardIds);
-        $totalHouses = (int) $stmt->fetchColumn();
-
-        $stmt = $db->prepare(
-            "SELECT COUNT(DISTINCT house_id) FROM MeterReadings
-             WHERE date_taken = CURRENT_DATE AND house_id IN (
-                 SELECT house_id FROM Houses WHERE ward_id IN ({$placeholders})
-             )"
-        );
-        $stmt->execute($wardIds);
-        $readToday = (int) $stmt->fetchColumn();
-
-        $readerWorkload = [
-            'wardCount' => count($wardIds),
-            'totalHouses' => $totalHouses,
-            'readToday' => $readToday,
-            'remaining' => max(0, $totalHouses - $readToday),
-        ];
-    } else {
-        $readerWorkload = ['wardCount' => 0, 'totalHouses' => 0, 'readToday' => 0, 'remaining' => 0];
+    $statusCounts = array_fill_keys(
+        ['Pending', 'Completed', 'Skipped', 'DamagedMeter', 'Vacant', 'Locked', 'IllegalConnection', 'RevisitRequired'],
+        0
+    );
+    foreach ($round as $h) {
+        $statusCounts[$h['visit_status']]++;
     }
+
+    $readerWorkload = [
+        'wardCount'    => count($wardIds),
+        'totalHouses'  => count($round),
+        'remaining'    => $statusCounts['Pending'],
+        'completed'    => count($round) - $statusCounts['Pending'],
+        'statusCounts' => $statusCounts,
+    ];
 }
 
 // Recent Activity widget: Admin sees the whole system's recent activity;
@@ -118,12 +112,16 @@ require __DIR__ . '/includes/header.php';
             <div class="stat-label">Houses across your <?= $readerWorkload['wardCount'] ?> ward(s)</div>
         </div>
         <div class="stat-card">
-            <div class="stat-value"><?= $readerWorkload['readToday'] ?></div>
-            <div class="stat-label">Read today</div>
+            <div class="stat-value"><?= $readerWorkload['completed'] ?></div>
+            <div class="stat-label">Visited today</div>
         </div>
         <div class="stat-card amber">
             <div class="stat-value"><?= $readerWorkload['remaining'] ?></div>
             <div class="stat-label">Remaining today</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value" id="unsyncedCount">&hellip;</div>
+            <div class="stat-label">Unsynced on this device</div>
         </div>
     <?php endif; ?>
 
@@ -140,12 +138,30 @@ require __DIR__ . '/includes/header.php';
 </div>
 
 <?php if ($readerWorkload !== null && $readerWorkload['totalHouses'] > 0): ?>
-    <?php $pct = (int) round(($readerWorkload['readToday'] / $readerWorkload['totalHouses']) * 100); ?>
-    <div class="form-panel" style="max-width:none;margin-bottom:26px;">
-        <p style="margin:0 0 8px;font-size:0.9rem;"><strong>Today's progress:</strong> <?= $readerWorkload['readToday'] ?> of <?= $readerWorkload['totalHouses'] ?> houses (<?= $pct ?>%)</p>
+    <?php $pct = (int) round(($readerWorkload['completed'] / $readerWorkload['totalHouses']) * 100); ?>
+    <div class="form-panel" style="max-width:none;margin-bottom:20px;">
+        <p style="margin:0 0 8px;font-size:0.9rem;"><strong>Today's progress:</strong> <?= $readerWorkload['completed'] ?> of <?= $readerWorkload['totalHouses'] ?> houses (<?= $pct ?>%)</p>
         <div style="background:#E1E6ED;border-radius:8px;height:14px;overflow:hidden;">
             <div style="background:#2C7873;height:100%;width:<?= $pct ?>%;"></div>
         </div>
+        <a class="btn amber" href="meter-readings/capture.php" style="margin-top:16px;">Continue Round &rarr;</a>
+    </div>
+
+    <?php
+    $statusLabels = ['Pending' => 'Pending', 'Completed' => 'Completed', 'Skipped' => 'Skipped',
+        'DamagedMeter' => 'Damaged meter', 'Vacant' => 'Vacant', 'Locked' => 'Locked premises',
+        'IllegalConnection' => 'Illegal connection', 'RevisitRequired' => 'Revisit required'];
+    ?>
+    <h2>Today's Reading Statistics</h2>
+    <div class="card-grid" style="margin-bottom:26px;">
+        <?php foreach ($statusLabels as $key => $label): ?>
+            <?php if ($readerWorkload['statusCounts'][$key] > 0): ?>
+                <div class="stat-card">
+                    <div class="stat-value"><?= $readerWorkload['statusCounts'][$key] ?></div>
+                    <div class="stat-label"><?= htmlspecialchars($label) ?></div>
+                </div>
+            <?php endif; ?>
+        <?php endforeach; ?>
     </div>
 <?php elseif ($readerWorkload !== null && $readerWorkload['totalHouses'] === 0): ?>
     <div class="alert warning" style="margin-bottom:26px;">
@@ -197,5 +213,16 @@ require __DIR__ . '/includes/header.php';
     </tbody>
 </table>
 </div>
+
+<?php if ($readerWorkload !== null): ?>
+<script src="/municipal-system/assets/js/offline-db.js"></script>
+<script>
+// Reuses the same IndexedDB the guided navigator writes to - this is
+// genuinely what's still sitting on this device, not a server-side guess.
+countPendingReadings().then(function (count) {
+    document.getElementById('unsyncedCount').textContent = count;
+});
+</script>
+<?php endif; ?>
 
 <?php require __DIR__ . '/includes/footer.php'; ?>

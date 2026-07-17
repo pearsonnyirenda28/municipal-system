@@ -116,6 +116,31 @@ file that is never uploaded to GitHub.
   - `schema.mysql.sql` and `migrate_to_mysql.php` were updated to match
     (both new tables added, `Houses` column list updated, dependency
     order preserved so `Wards` migrates before `Houses`).
+  - **Version 3.0 - Guided Field Operations is now complete**, built on a
+    branch (`version-3.0-guided-field-operations`), not on `main` directly.
+    - **New `HouseVisits` table**: one row per house, per reader, per day.
+      A visit is now tracked as its own thing, separate from whether a
+      reading was actually captured - a locked gate or a vacant plot is a
+      completed *visit* even though it isn't a completed *reading*.
+    - **House navigation**: `meter-readings/capture.php` is a guided
+      navigator now, not a free house picker - Previous/Next buttons walk
+      the reader's round in street/house-number order, a "Jump to house"
+      dropdown shows every house with its status, and landing on the page
+      with no `?house_id=` resumes at the first house that hasn't been
+      dealt with yet today.
+    - **Reading status**: alongside the existing meter-reading capture,
+      five explicit status buttons (Skip, Vacant, Locked Premises, Illegal
+      Connection, Revisit Required) record a visit outcome and
+      auto-advance to the next house; "Report Damaged Meter" hands off to
+      the existing damage-report form (now pre-filled with the house) and
+      marks the visit accordingly on save.
+    - **Reader dashboard**: the Version 2.5 workload widget now shows a
+      full status breakdown ("Today's Reading Statistics" - Completed,
+      Skipped, Vacant, etc.), plus an **Unsynced records** count read
+      directly from the browser's own IndexedDB (not guessed server-side).
+    - **Honest limitation**: the five status buttons are online-only for
+      now - unlike meter readings, marking a house Skipped/Vacant/Locked/
+      etc. does not yet work offline. See the roadmap section for why.
 
 ## 1. Requirements
 
@@ -276,6 +301,29 @@ your real values.
 4. Anyone cloning your repository then follows Section 2 above, starting
    from "copy `.env.example` to `.env`".
 
+### Pushing a feature branch (like this round's work)
+
+The repository already has `main` (Versions up to 2.5) and a second
+branch, `version-3.0-guided-field-operations`, with this round's changes
+on top of it - not merged into `main`, so you can review or test it
+separately before deciding to merge.
+
+```
+git push -u origin main
+git push -u origin version-3.0-guided-field-operations
+```
+
+On GitHub, that gives you a branch you can open a Pull Request from
+(GitHub will offer a "Compare & pull request" button) to review the diff
+against `main` before merging - or you can merge it yourself once you're
+happy with it:
+
+```
+git checkout main
+git merge version-3.0-guided-field-operations
+git push
+```
+
 ## 8. Folder structure
 
 ```
@@ -308,7 +356,7 @@ municipal-system/
 ├── fines/
 │   ├── list.php / issue.php / pay.php / receipt.php
 ├── meter-readings/
-│   ├── list.php / capture.php
+│   ├── list.php / capture.php / mark_status.php
 ├── damaged-meters/
 │   ├── list.php / report.php / update_status.php
 ├── wards/
@@ -342,15 +390,14 @@ changes (Chapter 4, Section 5.2).
   meter reading sync (they're currently recorded in ActivityLogs, but
   there's no dedicated review screen yet).
 
-**Version 2.0 and 2.5 (mobile/security and ward-based operations) are
-both complete** - see the changelog at the top of this file for the full
-list. **Not yet started:** Version 3.0's guided field operations
-(house-to-house navigation, per-visit status like pending/skipped/vacant/
-locked/illegal-connection instead of just the current abnormal flag) and
-everything from Version 3.5 onward (richer offline sync with device IDs
-and retry counts, the full installable PWA, supervisor progress/assignment
-tools beyond the current dashboard widget, and the enterprise-tier
-features - PDF/Excel export, analytics, a REST API, 2FA).
+**Version 2.0, 2.5, and 3.0 (mobile/security, ward-based operations, and
+guided field operations) are all complete** - see the changelog at the
+top of this file for the full list. **Not yet started:** everything from
+Version 3.5 onward - richer offline sync with device IDs and retry
+counts (and extending offline capture to the new visit-status buttons,
+not just meter readings), the full installable PWA, supervisor
+progress/assignment tools beyond the current dashboard widget, and the
+enterprise-tier features (PDF/Excel export, analytics, a REST API, 2FA).
 
 **Found during this security pass, not yet fixed:**
 - `setup_database.php`, `setup_admin.php`, and `migrate_to_mysql.php` are

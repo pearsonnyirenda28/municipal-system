@@ -47,6 +47,7 @@ $tables = [
                           'is_abnormal', 'reader_id', 'date_taken', 'client_ref'],
     'DamagedMeters'  => ['damage_id', 'house_id', 'description', 'photo_path', 'reported_by',
                           'date_reported', 'repair_status', 'date_fixed'],
+    'HouseVisits'    => ['visit_id', 'house_id', 'reader_id', 'visit_date', 'status', 'reading_id', 'notes', 'updated_at'],
     'ActivityLogs'   => ['log_id', 'user_id', 'action_description', 'ip_address', 'date_time'],
 ];
 
@@ -56,7 +57,7 @@ $primaryKeys = [
     'Users' => 'user_id', 'Wards' => 'ward_id', 'WardAssignments' => 'assignment_id',
     'Houses' => 'house_id', 'Cases' => 'case_id', 'Fines' => 'fine_id',
     'Payments' => 'payment_id', 'MeterReadings' => 'reading_id', 'DamagedMeters' => 'damage_id',
-    'ActivityLogs' => 'log_id',
+    'HouseVisits' => 'visit_id', 'ActivityLogs' => 'log_id',
 ];
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {

@@ -34,7 +34,10 @@ $stmt->execute($params);
 $houses = $stmt->fetchAll();
 
 $errors = [];
-$old = ['house_id' => '', 'description' => ''];
+$old = ['house_id' => (string) (int) ($_GET['house_id'] ?? 0), 'description' => ''];
+if ($old['house_id'] === '0') {
+    $old['house_id'] = '';
+}
 $success = false;
 
 const MAX_PHOTO_BYTES = 5 * 1024 * 1024; // 5MB
@@ -95,7 +98,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'reported_by' => currentUser()['id'],
             ]);
             logActivity(currentUser()['id'], "Reported damaged meter for house_id {$old['house_id']}");
+
+            // Version 3.0: if this house is part of today's guided round,
+            // reflect the damage report as today's visit status too.
+            upsertHouseVisit($db, (int) $old['house_id'], (int) currentUser()['id'], date('Y-m-d'), 'DamagedMeter');
+
             $success = true;
+            $reportedHouseId = (int) $old['house_id'];
             $old = ['house_id' => '', 'description' => ''];
         } catch (PDOException $e) {
             error_log('report damage failed: ' . $e->getMessage());
@@ -111,7 +120,10 @@ require __DIR__ . '/../includes/header.php';
 <p class="subtitle">A photo is optional but helps whoever schedules the repair.</p>
 
 <?php if ($success): ?>
-    <div class="alert success">Damage report saved. <a href="list.php">View all reports</a>.</div>
+    <div class="alert success">
+        Damage report saved. <a href="list.php">View all reports</a>
+        &nbsp;|&nbsp; <a href="/municipal-system/meter-readings/capture.php">Continue Round</a>
+    </div>
 <?php endif; ?>
 <?php if ($errors): ?>
     <div class="alert error"><?php foreach ($errors as $e): ?>&bull; <?= htmlspecialchars($e) ?><br><?php endforeach; ?></div>

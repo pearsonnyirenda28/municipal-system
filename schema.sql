@@ -148,6 +148,31 @@ CREATE TABLE IF NOT EXISTS DamagedMeters (
 );
 
 -- ------------------------------------------------------------
+-- HouseVisits
+-- Version 3.0 - Guided Field Operations. One row per house per reader
+-- per day, tracking where that house stands in today's round -
+-- independent of whether a meter reading was actually captured (a
+-- locked gate or a vacant plot is still a completed *visit*, just not
+-- a completed *reading*).
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS HouseVisits (
+    visit_id     INTEGER PRIMARY KEY AUTOINCREMENT,
+    house_id     INTEGER NOT NULL,
+    reader_id    INTEGER NOT NULL,
+    visit_date   TEXT NOT NULL,
+    status       TEXT NOT NULL DEFAULT 'Pending' CHECK (status IN
+                     ('Pending','Completed','Skipped','DamagedMeter','Vacant',
+                      'Locked','IllegalConnection','RevisitRequired')),
+    reading_id   INTEGER NULL,
+    notes        TEXT NULL,
+    updated_at   TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (house_id) REFERENCES Houses(house_id) ON DELETE CASCADE,
+    FOREIGN KEY (reader_id) REFERENCES Users(user_id) ON DELETE CASCADE,
+    FOREIGN KEY (reading_id) REFERENCES MeterReadings(reading_id) ON DELETE SET NULL,
+    UNIQUE (house_id, reader_id, visit_date)
+);
+
+-- ------------------------------------------------------------
 -- ActivityLogs
 -- ------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS ActivityLogs (

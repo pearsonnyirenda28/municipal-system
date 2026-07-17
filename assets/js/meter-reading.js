@@ -1,10 +1,11 @@
 /**
  * assets/js/meter-reading.js
- * Real, working version of the sample code documented in Chapter 5,
- * Sections 2.4 and 3.2.
+ * Version 3.0: the page is a guided round now, not a free house picker,
+ * so the "current house" comes from window.CURRENT_HOUSE (set server-side
+ * in capture.php) instead of a <select>'s chosen option. Saving a reading
+ * auto-advances to the next house in the round.
  */
 
-const houseSelect = document.getElementById('houseSelect');
 const previousField = document.getElementById('previousReading');
 const currentField = document.getElementById('currentReading');
 const btnSave = document.getElementById('btnSave');
@@ -22,11 +23,6 @@ function clearFieldError() {
     currentField.classList.remove('field-error');
 }
 
-houseSelect.addEventListener('change', function () {
-    const opt = this.options[this.selectedIndex];
-    previousField.value = opt.dataset.previous || '';
-});
-
 async function refreshPendingCount() {
     const count = await countPendingReadings();
     pendingCountEl.textContent = count;
@@ -42,45 +38,54 @@ function updateOfflineBanner() {
 window.addEventListener('online', () => { updateOfflineBanner(); syncPendingReadings(); });
 window.addEventListener('offline', updateOfflineBanner);
 
-btnSave.addEventListener('click', async function () {
-    const houseId = houseSelect.value;
-    const houseNumber = houseSelect.options[houseSelect.selectedIndex]?.dataset.houseNumber || '';
-    const previous = parseFloat(previousField.value);
-    const current = parseFloat(currentField.value);
+if (btnSave) {
+    btnSave.addEventListener('click', async function () {
+        const house = window.CURRENT_HOUSE;
+        const previous = parseFloat(previousField.value);
+        const current = parseFloat(currentField.value);
 
-    if (!houseId) {
-        showAlert('Please select a house.', 'error');
-        return;
-    }
-    if (isNaN(current)) {
-        currentField.classList.add('field-error');
-        showAlert('Please enter a valid numeric reading.', 'error');
-        return;
-    }
-    if (current < previous) {
-        currentField.classList.add('field-error');
-        showAlert('Current reading cannot be lower than the previous reading.', 'error');
-        return;
-    }
-    clearFieldError();
+        if (!house) {
+            showAlert('No house is loaded on this page.', 'error');
+            return;
+        }
+        if (isNaN(current)) {
+            currentField.classList.add('field-error');
+            showAlert('Please enter a valid numeric reading.', 'error');
+            return;
+        }
+        if (current < previous) {
+            currentField.classList.add('field-error');
+            showAlert('Current reading cannot be lower than the previous reading.', 'error');
+            return;
+        }
+        clearFieldError();
 
-    const record = {
-        clientRef: makeClientRef(),
-        houseId: parseInt(houseId, 10),
-        houseNumber,
-        previous,
-        current,
-        readerId: window.CURRENT_USER_ID,
-        dateTaken: new Date().toISOString().slice(0, 10),
-        synced: false,
-    };
+        const record = {
+            clientRef: makeClientRef(),
+            houseId: house.id,
+            houseNumber: house.number,
+            previous,
+            current,
+            readerId: window.CURRENT_USER_ID,
+            dateTaken: new Date().toISOString().slice(0, 10),
+            synced: false,
+        };
 
-    await saveReading(record);
-    currentField.value = '';
-    houseSelect.value = '';
-    previousField.value = '';
-    await refreshPendingCount();
-});
+        await saveReading(record);
+        await refreshPendingCount();
+
+        // Guided round: move on to the next house automatically. A short
+        // pause so the reader actually sees the confirmation message
+        // before the page navigates away.
+        if (house.nextHouseId) {
+            setTimeout(() => {
+                window.location.href = '?house_id=' + house.nextHouseId;
+            }, 900);
+        } else {
+            showAlert('Reading saved. That was the last house in today\'s round.', 'success');
+        }
+    });
+}
 
 /**
  * Matches Chapter 5, Section 3.2: try the server first, fall back to
@@ -140,7 +145,9 @@ async function syncPendingReadings() {
     await refreshPendingCount();
 }
 
-btnSync.addEventListener('click', syncPendingReadings);
+if (btnSync) {
+    btnSync.addEventListener('click', syncPendingReadings);
+}
 
 // Initial state on page load
 updateOfflineBanner();
