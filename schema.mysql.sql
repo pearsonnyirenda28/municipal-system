@@ -58,6 +58,7 @@ CREATE TABLE IF NOT EXISTS Fines (
     payment_status  ENUM('Unpaid','Paid') NOT NULL DEFAULT 'Unpaid',
     issued_by       INT NULL,
     date_issued     DATETIME NOT NULL,
+    client_ref      VARCHAR(40) NULL UNIQUE,
     FOREIGN KEY (case_id) REFERENCES Cases(case_id) ON DELETE SET NULL,
     FOREIGN KEY (issued_by) REFERENCES Users(user_id) ON DELETE SET NULL,
     CONSTRAINT chk_fine_amount CHECK (amount > 0)

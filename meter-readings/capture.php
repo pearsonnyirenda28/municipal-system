@@ -10,8 +10,8 @@
  * worker - see the roadmap notes in README.md for that next step). Once
  * loaded, the current house's last reading is embedded directly into the
  * page as JSON, so "Save Reading" works completely offline afterwards.
- * The status buttons (Skip/Vacant/Locked/...) are NOT yet offline-capable
- * - see the note near those buttons below.
+ * As of Version 3.5, the status buttons (Skip/Vacant/Locked/...) are
+ * offline-capable too, via the shared queue in assets/js/offline-queue.js.
  */
 require_once __DIR__ . '/../includes/db.php';
 require_once __DIR__ . '/../includes/auth.php';
@@ -73,7 +73,7 @@ require __DIR__ . '/../includes/header.php';
 
 <h1>Capture Meter Reading</h1>
 <p class="subtitle">Guided round: work through your assigned houses in order, or jump straight to one.
-    Reading capture works offline; the status buttons below currently need a connection.</p>
+    Reading capture and status updates both work offline - see Sync Now below.</p>
 
 <div id="offlineNotice" class="alert warning" style="display:none;">
     You are currently offline. This reading will be saved on this device and synced automatically
@@ -145,22 +145,17 @@ require __DIR__ . '/../includes/header.php';
             <hr style="margin:22px 0;border:none;border-top:1px solid #E1E6ED;">
 
             <p style="font-weight:bold;margin-bottom:10px;">Not able to read this meter?</p>
-            <div style="display:flex;gap:8px;flex-wrap:wrap;">
+            <div style="display:flex;gap:8px;flex-wrap:wrap;" id="statusButtons"
+                 data-house-id="<?= (int) $current['house_id'] ?>"
+                 data-next-house-id="<?= $nextHouse ? (int) $nextHouse['house_id'] : '' ?>">
                 <?php foreach (['Skipped' => 'Skip', 'Vacant' => 'Vacant', 'Locked' => 'Locked Premises',
                                 'IllegalConnection' => 'Illegal Connection', 'RevisitRequired' => 'Revisit Required'] as $statusValue => $label): ?>
-                    <form method="post" action="mark_status.php" style="display:inline;">
-                        <?= csrfField() ?>
-                        <input type="hidden" name="house_id" value="<?= (int) $current['house_id'] ?>">
-                        <input type="hidden" name="status" value="<?= $statusValue ?>">
-                        <input type="hidden" name="next_house_id" value="<?= $nextHouse ? (int) $nextHouse['house_id'] : '' ?>">
-                        <button type="submit" class="btn secondary"><?= $label ?></button>
-                    </form>
+                    <button type="button" class="btn secondary status-btn" data-status="<?= $statusValue ?>"><?= $label ?></button>
                 <?php endforeach; ?>
                 <a class="btn secondary" href="/municipal-system/damaged-meters/report.php?house_id=<?= (int) $current['house_id'] ?>">Report Damaged Meter</a>
             </div>
             <p style="font-size:0.8rem;color:#5B6472;margin-top:10px;">
-                These status buttons need a live connection right now - unlike meter readings, they
-                aren't yet stored offline for later sync.
+                These status buttons now work offline too, the same way meter readings do.
             </p>
         <?php endif; ?>
     </div>
@@ -174,8 +169,9 @@ window.CURRENT_HOUSE = <?= json_encode($current ? [
     'nextHouseId' => $nextHouse ? (int) $nextHouse['house_id'] : null,
 ] : null) ?>;
 </script>
-<script src="/municipal-system/assets/js/offline-db.js"></script>
+<script src="/municipal-system/assets/js/offline-queue.js"></script>
 <script src="/municipal-system/assets/js/meter-reading.js"></script>
+<script src="/municipal-system/assets/js/status-actions.js"></script>
 
 <?php endif; ?>
 

@@ -32,6 +32,7 @@ if (DB_DRIVER !== 'sqlite') {
         $pdo->exec($sql);
 
         migrateWardColumns($pdo);
+        migrateFinesClientRef($pdo);
 
         $success = true;
     } catch (Throwable $e) {
@@ -69,6 +70,19 @@ function migrateWardColumns(PDO $pdo): void
         $pdo->prepare('INSERT OR IGNORE INTO Wards (ward_name) VALUES (:name)')->execute(['name' => $wardName]);
         $pdo->prepare('UPDATE Houses SET ward_id = (SELECT ward_id FROM Wards WHERE ward_name = :name) WHERE ward = :name AND ward_id IS NULL')
             ->execute(['name' => $wardName]);
+    }
+}
+
+/**
+ * Version 3.5 migration: adds Fines.client_ref for older installs, used
+ * to make offline-issued fines idempotent on sync (same pattern as
+ * MeterReadings.client_ref from Version 3.0). Safe to run repeatedly.
+ */
+function migrateFinesClientRef(PDO $pdo): void
+{
+    $columns = array_column($pdo->query('PRAGMA table_info(Fines)')->fetchAll(), 'name');
+    if (!in_array('client_ref', $columns, true)) {
+        $pdo->exec('ALTER TABLE Fines ADD COLUMN client_ref TEXT NULL');
     }
 }
 

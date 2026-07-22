@@ -41,7 +41,7 @@ $tables = [
     'Cases'          => ['case_id', 'case_number', 'offender_name', 'id_number', 'offence_type',
                           'description', 'status', 'officer_id', 'date_opened'],
     'Fines'          => ['fine_id', 'fine_number', 'case_id', 'offender_name', 'house_number',
-                          'vehicle_plate', 'offence_type', 'amount', 'payment_status', 'issued_by', 'date_issued'],
+                          'vehicle_plate', 'offence_type', 'amount', 'payment_status', 'issued_by', 'date_issued', 'client_ref'],
     'Payments'       => ['payment_id', 'fine_id', 'amount_received', 'date_paid', 'received_by', 'receipt_number'],
     'MeterReadings'  => ['reading_id', 'house_id', 'previous_reading', 'current_reading', 'consumption',
                           'is_abnormal', 'reader_id', 'date_taken', 'client_ref'],

@@ -215,11 +215,12 @@ require __DIR__ . '/includes/header.php';
 </div>
 
 <?php if ($readerWorkload !== null): ?>
-<script src="/municipal-system/assets/js/offline-db.js"></script>
+<script src="/municipal-system/assets/js/offline-queue.js"></script>
 <script>
-// Reuses the same IndexedDB the guided navigator writes to - this is
-// genuinely what's still sitting on this device, not a server-side guess.
-countPendingReadings().then(function (count) {
+// Reuses the same IndexedDB queue the guided navigator writes to (any
+// type - readings, visit-status marks) - this is genuinely what's still
+// sitting on this device, not a server-side guess.
+countPending().then(function (count) {
     document.getElementById('unsyncedCount').textContent = count;
 });
 </script>
