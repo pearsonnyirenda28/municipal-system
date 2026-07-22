@@ -89,8 +89,8 @@ try {
 
     $stmt = $db->prepare(
         'INSERT INTO MeterReadings
-            (house_id, previous_reading, current_reading, consumption, is_abnormal, reader_id, date_taken, client_ref)
-         VALUES (:house_id, :previous, :current, :consumption, :abnormal, :reader_id, :date_taken, :client_ref)'
+            (house_id, previous_reading, current_reading, consumption, is_abnormal, reader_id, date_taken, client_ref, is_duplicate_flagged)
+         VALUES (:house_id, :previous, :current, :consumption, :abnormal, :reader_id, :date_taken, :client_ref, :dup_flag)'
     );
     $stmt->execute([
         'house_id'    => $houseId,
@@ -101,7 +101,18 @@ try {
         'reader_id'   => $_SESSION['user_id'],
         'date_taken'  => $dateTaken,
         'client_ref'  => $clientRef,
+        'dup_flag'    => $possibleDuplicate ? 1 : 0,
     ]);
+
+    // The earlier reading(s) for this house/date are just as much a part of
+    // the duplicate pair as the new one - flag them too if they weren't
+    // already, so the review screen shows the whole group together.
+    if ($possibleDuplicate) {
+        $db->prepare(
+            'UPDATE MeterReadings SET is_duplicate_flagged = 1
+             WHERE house_id = :house_id AND date_taken = :date AND client_ref != :ref AND duplicate_resolved_by IS NULL'
+        )->execute(['house_id' => $houseId, 'date' => $dateTaken, 'ref' => $clientRef]);
+    }
 
     $db->commit();
 

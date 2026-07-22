@@ -375,8 +375,39 @@ municipal-system/
 ## 9. What's built vs. what's still on the roadmap
 
 **Working now:** everything listed in Section 3 above, plus account
-lockout, session timeout, and a full activity log of logins and data
-changes (Chapter 4, Section 5.2).
+lockout, session timeout, a full activity log of logins and data changes
+(Chapter 4, Section 5.2), and - as of this pass - all of the following:
+
+- **Duplicate reading review** (`meter-readings/duplicates.php`): the
+  "possible duplicate" flags raised during meter reading sync are no
+  longer just recorded in ActivityLogs with no way to act on them - there's
+  now a dedicated screen to keep one and discard the rest, or confirm both
+  were legitimate.
+- **Dashboard trend charts**: 6-month Cases/Fines and Meter
+  Readings/Abnormal charts, rendered as dependency-free inline SVG (no
+  charting library, so nothing extra to load - matters on a dashboard
+  that's sometimes viewed on the same patchy connections the offline
+  meter-reading flow exists for).
+- **PDF export** on all four reports (Cases, Fines, Meter Readings, Damaged
+  Meters), via a vendored copy of FPDF (`lib/fpdf.php` - no Composer
+  needed, consistent with the rest of this app).
+- **User management**: reset password, activate/deactivate accounts (with
+  safeguards against self-lockout and deactivating the last Admin).
+- **National ID / vehicle plate format validation** on case and fine
+  entry.
+- **Database indexes** on every column the list/report pages filter, sort,
+  or join by.
+- **Backups**: on-demand and scheduled (`cli_backup.php`), with restore.
+  See `docs/ADMIN_MANUAL.md` section 6.
+- **Notifications**: a bell in the header surfaces unpaid fines, abnormal
+  readings, pending repairs, unresolved duplicates, and sync failures,
+  scoped to what each role actually needs to see.
+- **Global error handling**: `APP_ENV=production` hides raw PHP errors from
+  visitors and logs them to `error_log.txt` instead, viewable by an Admin
+  at `error_log_viewer.php` without needing server/FTP access.
+- **Deployment**: `.htaccess` (blocks direct access to `.env`, the SQLite
+  file, backups, `.git`, and `setup_admin.php` under real Apache), plus
+  `docs/ADMIN_MANUAL.md` and `docs/USER_MANUAL.md` alongside this README.
 
 **Designed in Chapter 4 but not yet built:**
 - A full offline-installable app shell (service worker) - right now the
@@ -386,18 +417,19 @@ changes (Chapter 4, Section 5.2).
   (`houses/edit.php`, Version 2.5), but Cases, Fines and Meter Readings
   still only support create, list, and status/payment updates, not full
   edit-in-place.
-- An admin screen to review the "possible duplicate" flags raised during
-  meter reading sync (they're currently recorded in ActivityLogs, but
-  there's no dedicated review screen yet).
+- Offline capture for the Skip/Vacant/Locked visit-status buttons (see
+  `meter-readings/mark_status.php`) - only the reading itself queues
+  offline right now.
 
-**Version 2.0, 2.5, and 3.0 (mobile/security, ward-based operations, and
-guided field operations) are all complete** - see the changelog at the
-top of this file for the full list. **Not yet started:** everything from
-Version 3.5 onward - richer offline sync with device IDs and retry
-counts (and extending offline capture to the new visit-status buttons,
-not just meter readings), the full installable PWA, supervisor
-progress/assignment tools beyond the current dashboard widget, and the
-enterprise-tier features (PDF/Excel export, analytics, a REST API, 2FA).
+**Version 2.0 through 4.0 (mobile/security, ward-based operations, guided
+field operations, and the system-improvements pass covering duplicates,
+charts, PDF export, user management, validation, indexes, backups,
+notifications, error handling, and deployment) are all complete** - see the
+changelog at the top of this file for the full list. **Not yet started:**
+richer offline sync with device IDs and retry counts, the full installable
+PWA, supervisor progress/assignment tools beyond the current dashboard
+widget, and the enterprise-tier features (Excel export, analytics, a REST
+API, 2FA).
 
 **Found during this security pass, not yet fixed:**
 - `setup_database.php`, `setup_admin.php`, and `migrate_to_mysql.php` are
@@ -409,9 +441,20 @@ enterprise-tier features (PDF/Excel export, analytics, a REST API, 2FA).
   exists), but `migrate_to_mysql.php` currently isn't - it'll happily
   re-run for anyone who reaches it. **Delete `migrate_to_mysql.php` once
   you've actually migrated**, the same way `setup_admin.php` tells you to
-  delete itself. Worth revisiting properly (e.g. requiring an Admin login)
-  before this ever sits on a real public-facing host rather than a local
-  XAMPP install.
+  delete itself. `.htaccess` (section 10 below) blocks direct browser
+  access to `setup_admin.php` on a real Apache deployment, but not to
+  `migrate_to_mysql.php` or `setup_database.php` - worth tightening before
+  this ever sits on a real public-facing host rather than a local XAMPP
+  install.
 
 These are natural next additions on top of the same database and folder
 structure - none of them require changing what has already been built.
+
+## 10. Manuals and deployment
+
+- **Admin tasks** (user management, backups, error log, deploying for
+  real): `docs/ADMIN_MANUAL.md`.
+- **Day-to-day usage** for every role (Officers, Clerks, Meter Readers,
+  Supervisors): `docs/USER_MANUAL.md`.
+- Both assume the setup in sections 1-2 above is already done.
+

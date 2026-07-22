@@ -6,6 +6,7 @@
  */
 require_once __DIR__ . '/../includes/db.php';
 require_once __DIR__ . '/../includes/auth.php';
+require_once __DIR__ . '/../includes/validators.php';
 requireRole(['Admin', 'Officer']);
 
 $offenceTypes = ['Littering', 'Illegal Vending', 'Reckless Driving', 'Noise Violation', 'Assault', 'Theft', 'Other'];
@@ -38,6 +39,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
     if ($old['offence_type'] === '') {
         $errors[] = 'Please select an offence type.';
+    }
+    if (!isValidNationalId($old['id_number'])) {
+        $errors[] = 'National ID must be in the format 63-123456A78 (2 digits, 6-8 digits, 1 letter, 2 digits).';
+    } elseif ($old['id_number'] !== '') {
+        $old['id_number'] = normalizeNationalId($old['id_number']);
     }
 
     if (!$errors) {

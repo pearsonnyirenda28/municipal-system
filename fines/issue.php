@@ -6,6 +6,7 @@
  */
 require_once __DIR__ . '/../includes/db.php';
 require_once __DIR__ . '/../includes/auth.php';
+require_once __DIR__ . '/../includes/validators.php';
 requireRole(['Admin', 'Officer']);
 
 $offenceTypes = ['Littering', 'Illegal Vending', 'Reckless Driving', 'Noise Violation', 'Other'];
@@ -40,6 +41,11 @@ function validateFineInput(array $data): array
     }
     if (empty($data['house_number']) && empty($data['vehicle_plate'])) {
         $errors[] = 'Provide either a house number or a vehicle plate.';
+    }
+    // Improvement 14: format validation, added alongside the fields
+    // documented in Chapter 5, Section 2.2.
+    if (!empty($data['vehicle_plate']) && !isValidVehiclePlate($data['vehicle_plate'])) {
+        $errors[] = 'Vehicle plate must be in the format ABC 1234 (2-3 letters, 3-4 digits).';
     }
     return $errors;
 }
@@ -107,6 +113,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     ];
 
     $errors = validateFineInput($old);
+
+    if (!$errors && $old['vehicle_plate'] !== '') {
+        $old['vehicle_plate'] = normalizeVehiclePlate($old['vehicle_plate']);
+    }
 
     if (!$errors) {
         $result = saveFine(getDb(), $old, currentUser()['id'], $caseId ?: null);

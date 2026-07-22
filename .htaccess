@@ -1,0 +1,62 @@
+# .htaccess
+# Improvement 19: Deployment - hardening for a real Apache/XAMPP deploy.
+# None of this matters for the PHP built-in dev server (php -S), which
+# ignores .htaccess entirely - it only takes effect once this sits in
+# htdocs under real Apache, which is the point: a school project marked
+# "complete" only when it's actually deployable, not just runnable
+# locally via `php -S`.
+
+# ------------------------------------------------------------
+# Block direct access to anything that is data, not application code.
+# All of this is still readable BY the PHP app itself (PDO, file_get_contents,
+# etc. don't go through Apache/.htaccess) - this only stops a browser
+# requesting the file's URL directly.
+# ------------------------------------------------------------
+<FilesMatch "\.(env|sqlite|sqlite-journal|db|log|sql)$">
+    Require all denied
+</FilesMatch>
+
+# error_log.txt is named .txt, not .log (see config.php / ERROR_LOG_PATH),
+# so it needs its own rule - the pattern above wouldn't catch it.
+<Files "error_log.txt">
+    Require all denied
+</Files>
+
+# setup_admin.php is NOT blocked here on purpose - you need to reach it
+# once, in a browser, to create your first Admin account. It already
+# protects itself at the application level (it refuses to do anything
+# once an Admin account exists), so leaving it reachable isn't a real
+# risk - but delete or rename it once your account is created anyway,
+# simply because there's no reason to keep a setup script sitting there
+# once it's served its purpose. See docs/ADMIN_MANUAL.md section 8.
+
+# Backups, the SQLite database, and .git contain real data (or, for
+# .git, the full commit history) - backups/ and data/ each have their own
+# .htaccess denying all access outright (a <Directory> block would be the
+# more obvious way to write this, but that's only valid in the main
+# server config, not inside a .htaccess file). .git/ is blocked here
+# instead, since writing a file inside .git's own folder isn't something
+# git tooling expects.
+RedirectMatch 404 /\.git
+
+Options -Indexes
+
+# ------------------------------------------------------------
+# Basic security headers.
+# ------------------------------------------------------------
+<IfModule mod_headers.c>
+    Header set X-Content-Type-Options "nosniff"
+    Header set X-Frame-Options "SAMEORIGIN"
+    Header set Referrer-Policy "strict-origin-when-cross-origin"
+</IfModule>
+
+# ------------------------------------------------------------
+# Force HTTPS - commented out by default since local XAMPP development
+# has no TLS certificate. Uncomment for a real deployment once you have
+# one (e.g. via Let's Encrypt).
+# ------------------------------------------------------------
+# <IfModule mod_rewrite.c>
+#     RewriteEngine On
+#     RewriteCond %{HTTPS} off
+#     RewriteRule ^(.*)$ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
+# </IfModule>

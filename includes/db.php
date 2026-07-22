@@ -38,6 +38,45 @@ function dbWithinLast(string $column, int $amount, string $unit = 'DAY'): string
 }
 
 /**
+ * Improvement 3 (dashboard trend charts): a "YYYY-MM" SQL expression for
+ * GROUP BY, in whichever dialect DB_DRIVER needs. Used with
+ * monthlyBuckets() below, which fills in any month a GROUP BY skipped
+ * because it had zero rows, so a chart never silently drops a bar.
+ */
+function dbMonthKey(string $column): string
+{
+    if (DB_DRIVER === 'mysql') {
+        return "DATE_FORMAT({$column}, '%Y-%m')";
+    }
+    return "strftime('%Y-%m', {$column})";
+}
+
+/**
+ * Builds the last $months month keys (oldest first, e.g. ['2026-02', ...,
+ * '2026-07']) and maps $rows (each with a 'month' key from dbMonthKey()
+ * and one or more count columns) onto them, so every month appears even
+ * with zero activity.
+ */
+function monthlyBuckets(array $rows, int $months, array $valueColumns): array
+{
+    $byMonth = [];
+    foreach ($rows as $row) {
+        $byMonth[$row['month']] = $row;
+    }
+
+    $result = [];
+    for ($i = $months - 1; $i >= 0; $i--) {
+        $key = date('Y-m', strtotime("-{$i} months"));
+        $entry = ['month' => $key, 'label' => date('M', strtotime($key . '-01'))];
+        foreach ($valueColumns as $col) {
+            $entry[$col] = isset($byMonth[$key]) ? (float) $byMonth[$key][$col] : 0;
+        }
+        $result[] = $entry;
+    }
+    return $result;
+}
+
+/**
  * Version 2.5: which wards is this meter reader assigned to? Returns an
  * empty array for anyone who isn't a MeterReader (Admin isn't scoped by
  * ward at all - it sees everything, checked separately by each caller).

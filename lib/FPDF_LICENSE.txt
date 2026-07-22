@@ -1,0 +1,3 @@
+FPDF is released under a permissive free license (see http://www.fpdf.org/en/script/script37.php).
+Vendored here as a single file (lib/fpdf.php) so the project has no Composer/vendor dependency -
+consistent with the rest of this app, which is plain PHP with no build step.

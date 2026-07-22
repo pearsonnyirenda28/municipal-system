@@ -23,4 +23,14 @@ document.addEventListener('DOMContentLoaded', function () {
             toggle.setAttribute('aria-expanded', 'false');
         });
     });
+
+    // Improvement 17: click anywhere outside an open notification
+    // dropdown to close it (the bell itself uses inline onclick to open).
+    document.addEventListener('click', function (event) {
+        document.querySelectorAll('.notif-dropdown.open').forEach(function (dropdown) {
+            if (!dropdown.parentElement.contains(event.target)) {
+                dropdown.classList.remove('open');
+            }
+        });
+    });
 });

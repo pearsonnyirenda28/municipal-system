@@ -54,6 +54,23 @@ function requireLogin(): void
         exit;
     }
 
+    // Improvement 11: an Admin deactivating a user should take effect
+    // immediately, not just block their *next* login - otherwise a
+    // currently-open session keeps working until it naturally times out.
+    static $activeChecked = false;
+    if (!$activeChecked) {
+        $activeChecked = true;
+        $stmt = getDb()->prepare('SELECT is_active FROM Users WHERE user_id = :id');
+        $stmt->execute(['id' => $_SESSION['user_id']]);
+        $row = $stmt->fetch();
+        if (!$row || !$row['is_active']) {
+            session_unset();
+            session_destroy();
+            header('Location: /municipal-system/login.php?deactivated=1');
+            exit;
+        }
+    }
+
     $_SESSION['last_activity'] = time();
 }
 

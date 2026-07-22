@@ -32,6 +32,9 @@ if (DB_DRIVER !== 'sqlite') {
         $pdo->exec($sql);
 
         migrateWardColumns($pdo);
+        migrateDuplicateColumns($pdo);
+        migrateUserActiveColumn($pdo);
+        migrateIndexes($pdo);
 
         $success = true;
     } catch (Throwable $e) {
@@ -69,6 +72,81 @@ function migrateWardColumns(PDO $pdo): void
         $pdo->prepare('INSERT OR IGNORE INTO Wards (ward_name) VALUES (:name)')->execute(['name' => $wardName]);
         $pdo->prepare('UPDATE Houses SET ward_id = (SELECT ward_id FROM Wards WHERE ward_name = :name) WHERE ward = :name AND ward_id IS NULL')
             ->execute(['name' => $wardName]);
+    }
+}
+
+/**
+ * Adds the duplicate-review columns to MeterReadings on older installs
+ * (Improvement 2: Duplicate Record Detection). save_reading.php has always
+ * detected possible duplicates, but only wrote them into ActivityLogs as
+ * text - these columns let a dedicated review screen actually query for
+ * them and record who resolved each one. Safe to run repeatedly.
+ */
+function migrateDuplicateColumns(PDO $pdo): void
+{
+    $columns = array_column($pdo->query('PRAGMA table_info(MeterReadings)')->fetchAll(), 'name');
+
+    if (!in_array('is_duplicate_flagged', $columns, true)) {
+        $pdo->exec('ALTER TABLE MeterReadings ADD COLUMN is_duplicate_flagged INTEGER NOT NULL DEFAULT 0');
+    }
+    if (!in_array('duplicate_resolved_by', $columns, true)) {
+        $pdo->exec('ALTER TABLE MeterReadings ADD COLUMN duplicate_resolved_by INTEGER NULL');
+    }
+    if (!in_array('duplicate_resolved_at', $columns, true)) {
+        $pdo->exec('ALTER TABLE MeterReadings ADD COLUMN duplicate_resolved_at TEXT NULL');
+    }
+}
+
+/**
+ * Adds Users.is_active on older installs (Improvement 11: User
+ * Management - activate/deactivate accounts). Defaults every existing
+ * account to active, so nobody is locked out by this migration.
+ */
+function migrateUserActiveColumn(PDO $pdo): void
+{
+    $columns = array_column($pdo->query('PRAGMA table_info(Users)')->fetchAll(), 'name');
+    if (!in_array('is_active', $columns, true)) {
+        $pdo->exec('ALTER TABLE Users ADD COLUMN is_active INTEGER NOT NULL DEFAULT 1');
+    }
+}
+
+/**
+ * Creates every secondary index from schema.sql (Improvement 15) on
+ * older installs. CREATE INDEX IF NOT EXISTS makes this safe to run on
+ * every setup_database.php visit, same as the CREATE TABLE statements.
+ */
+function migrateIndexes(PDO $pdo): void
+{
+    $indexes = [
+        'idx_cases_status'      => 'Cases(status)',
+        'idx_cases_officer'     => 'Cases(officer_id)',
+        'idx_cases_date_opened' => 'Cases(date_opened)',
+        'idx_fines_status'      => 'Fines(payment_status)',
+        'idx_fines_date_issued' => 'Fines(date_issued)',
+        'idx_fines_case'        => 'Fines(case_id)',
+        'idx_payments_fine'     => 'Payments(fine_id)',
+        'idx_wardassign_ward'   => 'WardAssignments(ward_id)',
+        'idx_wardassign_user'   => 'WardAssignments(user_id)',
+        'idx_houses_ward'       => 'Houses(ward_id)',
+        'idx_houses_number'     => 'Houses(house_number)',
+        'idx_readings_house'    => 'MeterReadings(house_id)',
+        'idx_readings_date'     => 'MeterReadings(date_taken)',
+        'idx_readings_reader'   => 'MeterReadings(reader_id)',
+        'idx_readings_abnormal' => 'MeterReadings(is_abnormal)',
+        'idx_readings_dupflag'  => 'MeterReadings(is_duplicate_flagged)',
+        'idx_damaged_house'     => 'DamagedMeters(house_id)',
+        'idx_damaged_status'    => 'DamagedMeters(repair_status)',
+        'idx_damaged_reporter'  => 'DamagedMeters(reported_by)',
+        'idx_visits_house'      => 'HouseVisits(house_id)',
+        'idx_visits_reader'     => 'HouseVisits(reader_id)',
+        'idx_visits_date'       => 'HouseVisits(visit_date)',
+        'idx_activitylogs_user' => 'ActivityLogs(user_id)',
+        'idx_activitylogs_time' => 'ActivityLogs(date_time)',
+        'idx_users_role'        => 'Users(role)',
+        'idx_users_active'      => 'Users(is_active)',
+    ];
+    foreach ($indexes as $name => $target) {
+        $pdo->exec("CREATE INDEX IF NOT EXISTS {$name} ON {$target}");
     }
 }
 

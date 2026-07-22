@@ -86,3 +86,99 @@ define('SESSION_TIMEOUT_SECONDS', 15 * 60);
 // gateway key or similar would go here, read the same way as everything
 // else above - never hard-coded, always from .env.
 define('SMS_GATEWAY_API_KEY', env('SMS_GATEWAY_API_KEY', ''));
+
+// ------------------------------------------------------------
+// Improvement 18: global error handling.
+// APP_ENV=local (the default) shows full PHP errors on-screen, same as
+// out-of-the-box PHP - useful while developing. APP_ENV=production
+// turns that off: every warning/notice/exception is written to
+// error_log.txt instead, and the visitor sees one friendly page
+// (includes/error_page.php) with no file paths, line numbers, or SQL
+// visible - a lockout attempt or a malformed request shouldn't hand
+// back a stack trace with the server's folder layout in it.
+// Set APP_ENV=production in .env for the real deployment.
+// ------------------------------------------------------------
+define('ERROR_LOG_PATH', __DIR__ . '/error_log.txt');
+
+if (APP_ENV === 'production') {
+    ini_set('display_errors', '0');
+    ini_set('log_errors', '1');
+    ini_set('error_log', ERROR_LOG_PATH);
+    error_reporting(E_ALL);
+    // Buffered so a fatal error partway through a page can be swapped
+    // for the friendly error page below, instead of appearing after
+    // whatever HTML had already been sent.
+    ob_start();
+} else {
+    ini_set('display_errors', '1');
+    error_reporting(E_ALL);
+}
+
+/** Formats and appends one line to error_log.txt, regardless of APP_ENV
+ *  (so even local development keeps a record, not just the screen). */
+function appLogError(string $type, string $message, string $file = '', int $line = 0): void
+{
+    $entry = sprintf(
+        "[%s] %s: %s%s\n",
+        date('Y-m-d H:i:s'),
+        $type,
+        $message,
+        $file ? " in {$file} on line {$line}" : ''
+    );
+    error_log($entry, 3, ERROR_LOG_PATH);
+}
+
+function showFriendlyErrorPage(): void
+{
+    if (ob_get_level() > 0) {
+        ob_end_clean();
+    }
+    if (!headers_sent()) {
+        http_response_code(500);
+    }
+    require __DIR__ . '/includes/error_page.php';
+}
+
+set_error_handler(function (int $severity, string $message, string $file, int $line): bool {
+    // Respect an @-suppressed expression (error_reporting() returns 0 while one is active).
+    if (!(error_reporting() & $severity)) {
+        return false;
+    }
+    appLogError('PHP ' . match (true) {
+        (bool) ($severity & (E_ERROR | E_USER_ERROR)) => 'Error',
+        (bool) ($severity & (E_WARNING | E_USER_WARNING)) => 'Warning',
+        default => 'Notice',
+    }, $message, $file, $line);
+
+    // Local/dev: returning false lets PHP's own default handling run
+    // too, which is what actually prints the error inline (display_errors=1).
+    // Production: log_errors + error_log are also set below, so letting
+    // PHP's default handling continue would write a second, differently
+    // formatted copy of the same line - appLogError() above already
+    // covers it, so return true here to stop there.
+    return APP_ENV === 'production';
+});
+
+set_exception_handler(function (Throwable $e): void {
+    appLogError(get_class($e) . ' (uncaught)', $e->getMessage(), $e->getFile(), $e->getLine());
+    if (APP_ENV === 'production') {
+        showFriendlyErrorPage();
+    } else {
+        // Local/dev: fall through to PHP's own default formatting, which
+        // is more detailed (stack trace) than we'd want to hand-roll here.
+        echo '<pre style="background:#FBEAEA;padding:20px;border-radius:8px;white-space:pre-wrap;">'
+           . htmlspecialchars((string) $e) . '</pre>';
+    }
+});
+
+// Fatal errors (E_ERROR, parse errors, out-of-memory, etc.) skip both
+// handlers above entirely - this is the only reliable way to catch them.
+register_shutdown_function(function (): void {
+    $error = error_get_last();
+    if ($error && in_array($error['type'], [E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR], true)) {
+        appLogError('Fatal', $error['message'], $error['file'], $error['line']);
+        if (APP_ENV === 'production') {
+            showFriendlyErrorPage();
+        }
+    }
+});

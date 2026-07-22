@@ -125,6 +125,7 @@ async function saveReading(record) {
 async function syncPendingReadings() {
     if (!navigator.onLine) return;
     const pending = await getUnsyncedReadings();
+    let lastError = null;
     for (const record of pending) {
         try {
             const response = await fetch('/municipal-system/api/save_reading.php', {
@@ -139,10 +140,24 @@ async function syncPendingReadings() {
             }
         } catch (err) {
             console.warn('Sync attempt failed for', record.clientRef, err.message);
+            lastError = err.message;
             break; // stop trying if the connection drops again mid-sync
         }
     }
     await refreshPendingCount();
+
+    // Improvement 17: surface a persistent sync problem as a server-side
+    // notification (visible to Admin/MeterSupervisor), not just a
+    // console warning nobody but this device will ever see.
+    if (lastError) {
+        const stillPending = await countPendingReadings();
+        fetch('/municipal-system/api/report_sync_failure.php', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': window.CSRF_TOKEN },
+            credentials: 'same-origin',
+            body: JSON.stringify({ pendingCount: stillPending, reason: lastError }),
+        }).catch(() => {}); // best-effort - don't let a failed report itself throw
+    }
 }
 
 if (btnSync) {

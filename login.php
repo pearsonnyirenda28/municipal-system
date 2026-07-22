@@ -21,6 +21,9 @@ $error = '';
 if (!empty($_GET['timeout'])) {
     $error = 'You were logged out after 15 minutes of inactivity. Please log in again.';
 }
+if (!empty($_GET['deactivated'])) {
+    $error = 'Your account has been deactivated. Please contact an Administrator.';
+}
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     verifyCsrf();
@@ -39,15 +42,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $user = $stmt->fetch();
 
         if ($user && password_verify($password, $user['password_hash'])) {
-            clearFailedLogins($username);
-            session_regenerate_id(true);
-            $_SESSION['user_id']        = $user['user_id'];
-            $_SESSION['full_name']      = $user['full_name'];
-            $_SESSION['role']           = $user['role'];
-            $_SESSION['last_activity']  = time();
-            logActivity($user['user_id'], 'Logged in');
-            header('Location: dashboard.php');
-            exit;
+            if (!$user['is_active']) {
+                logActivity($user['user_id'], "Blocked login attempt on deactivated account '{$username}'");
+                $error = 'This account has been deactivated. Please contact an Administrator.';
+            } else {
+                clearFailedLogins($username);
+                session_regenerate_id(true);
+                $_SESSION['user_id']        = $user['user_id'];
+                $_SESSION['full_name']      = $user['full_name'];
+                $_SESSION['role']           = $user['role'];
+                $_SESSION['last_activity']  = time();
+                logActivity($user['user_id'], 'Logged in');
+                header('Location: dashboard.php');
+                exit;
+            }
         } else {
             recordFailedLogin($username);
             logActivity(null, "Failed login attempt for username '{$username}'");

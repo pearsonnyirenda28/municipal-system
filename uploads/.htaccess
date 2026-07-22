@@ -1,0 +1,4 @@
+# Photos ARE meant to be viewable (shown inline in damaged-meters/list.php),
+# just not *listed* - a directory index would let anyone browse every
+# resident's uploaded photo without going through the app/login at all.
+Options -Indexes

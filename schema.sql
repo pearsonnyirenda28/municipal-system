@@ -20,6 +20,7 @@ CREATE TABLE IF NOT EXISTS Users (
     password_hash  TEXT NOT NULL,
     role           TEXT NOT NULL CHECK (role IN ('Admin','Officer','MeterReader','Clerk','PoliceSupervisor','MeterSupervisor')),
     full_name      TEXT NOT NULL,
+    is_active      INTEGER NOT NULL DEFAULT 1,
     created_at     TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -125,8 +126,12 @@ CREATE TABLE IF NOT EXISTS MeterReadings (
     reader_id         INTEGER NULL,
     date_taken        TEXT NOT NULL,
     client_ref        TEXT NULL,
+    is_duplicate_flagged INTEGER NOT NULL DEFAULT 0,
+    duplicate_resolved_by INTEGER NULL,
+    duplicate_resolved_at TEXT NULL,
     FOREIGN KEY (house_id) REFERENCES Houses(house_id) ON DELETE CASCADE,
     FOREIGN KEY (reader_id) REFERENCES Users(user_id) ON DELETE SET NULL,
+    FOREIGN KEY (duplicate_resolved_by) REFERENCES Users(user_id) ON DELETE SET NULL,
     CHECK (current_reading >= previous_reading),
     UNIQUE (house_id, date_taken, client_ref)
 );
@@ -183,6 +188,49 @@ CREATE TABLE IF NOT EXISTS ActivityLogs (
     date_time           TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (user_id) REFERENCES Users(user_id) ON DELETE SET NULL
 );
+
+-- ============================================================
+-- Indexes (Improvement 15: Database Performance)
+-- SQLite does NOT automatically index foreign key columns (unlike
+-- InnoDB, which creates one implicitly for every FK) - these cover the
+-- FK columns plus the other columns list/report pages filter or sort
+-- by most often (see reports/*.php, */list.php).
+-- ============================================================
+CREATE INDEX IF NOT EXISTS idx_cases_status        ON Cases(status);
+CREATE INDEX IF NOT EXISTS idx_cases_officer        ON Cases(officer_id);
+CREATE INDEX IF NOT EXISTS idx_cases_date_opened    ON Cases(date_opened);
+
+CREATE INDEX IF NOT EXISTS idx_fines_status         ON Fines(payment_status);
+CREATE INDEX IF NOT EXISTS idx_fines_date_issued    ON Fines(date_issued);
+CREATE INDEX IF NOT EXISTS idx_fines_case           ON Fines(case_id);
+
+CREATE INDEX IF NOT EXISTS idx_payments_fine        ON Payments(fine_id);
+
+CREATE INDEX IF NOT EXISTS idx_wardassign_ward      ON WardAssignments(ward_id);
+CREATE INDEX IF NOT EXISTS idx_wardassign_user      ON WardAssignments(user_id);
+
+CREATE INDEX IF NOT EXISTS idx_houses_ward          ON Houses(ward_id);
+CREATE INDEX IF NOT EXISTS idx_houses_number        ON Houses(house_number);
+
+CREATE INDEX IF NOT EXISTS idx_readings_house       ON MeterReadings(house_id);
+CREATE INDEX IF NOT EXISTS idx_readings_date        ON MeterReadings(date_taken);
+CREATE INDEX IF NOT EXISTS idx_readings_reader      ON MeterReadings(reader_id);
+CREATE INDEX IF NOT EXISTS idx_readings_abnormal    ON MeterReadings(is_abnormal);
+CREATE INDEX IF NOT EXISTS idx_readings_dupflag     ON MeterReadings(is_duplicate_flagged);
+
+CREATE INDEX IF NOT EXISTS idx_damaged_house        ON DamagedMeters(house_id);
+CREATE INDEX IF NOT EXISTS idx_damaged_status       ON DamagedMeters(repair_status);
+CREATE INDEX IF NOT EXISTS idx_damaged_reporter     ON DamagedMeters(reported_by);
+
+CREATE INDEX IF NOT EXISTS idx_visits_house         ON HouseVisits(house_id);
+CREATE INDEX IF NOT EXISTS idx_visits_reader         ON HouseVisits(reader_id);
+CREATE INDEX IF NOT EXISTS idx_visits_date          ON HouseVisits(visit_date);
+
+CREATE INDEX IF NOT EXISTS idx_activitylogs_user    ON ActivityLogs(user_id);
+CREATE INDEX IF NOT EXISTS idx_activitylogs_time    ON ActivityLogs(date_time);
+
+CREATE INDEX IF NOT EXISTS idx_users_role           ON Users(role);
+CREATE INDEX IF NOT EXISTS idx_users_active         ON Users(is_active);
 
 -- ============================================================
 -- Seed data - sample wards and houses so Wards, Houses and Meter
