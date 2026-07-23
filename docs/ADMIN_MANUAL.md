@@ -85,7 +85,16 @@ than on-screen. Left as `local` (the default), errors show directly in the
 browser, which is useful while developing but should never go live like
 that - a raw PHP error can reveal file paths and sometimes query details.
 
-## 8. Deploying for real (not just running locally)
+## 8. Real-time notifications (optional)
+
+The notification bell normally refreshes on every page load. Running
+`php ws/server.php` in its own terminal (or as a scheduled/background
+service - see `ws/README.md`) makes it update live within a few seconds
+of something happening, with a small glass toast for anything new,
+without needing Composer or anything else installed. Entirely optional -
+the app works exactly the same without it, just without the live push.
+
+## 9. Deploying for real (not just running locally)
 
 1. Copy `.env.example` to `.env` and set real values - at minimum
    `APP_ENV=production`, and either the SQLite path or the MySQL
