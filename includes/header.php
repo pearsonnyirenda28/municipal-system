@@ -65,5 +65,8 @@ $myMenu = $menus[$user['role']] ?? [];
         <a href="/municipal-system/logout.php" class="btn-logout">Logout</a>
     </div>
 </header>
+<div id="toastContainer" class="toast-container" aria-live="polite" data-ws-port="<?= (int) WS_PORT ?>"></div>
 <script src="/municipal-system/assets/js/nav.js"></script>
+<script src="/municipal-system/assets/js/notifications-ws.js"></script>
 <main class="content">
+

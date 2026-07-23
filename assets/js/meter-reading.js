@@ -1,10 +1,19 @@
 /**
  * assets/js/meter-reading.js
  * Version 3.0: the page is a guided round now, not a free house picker,
- * so the "current house" comes from window.CURRENT_HOUSE (set server-side
- * in capture.php) instead of a <select>'s chosen option. Saving a reading
- * auto-advances to the next house in the round.
+ * so the "current house" comes from window.CURRENT_HOUSE (set below from
+ * the #meterConfig data attributes rendered by capture.php - not an
+ * inline <script> block, since the app's CSP (script-src 'self', no
+ * unsafe-inline) blocks those) instead of a <select>'s chosen option.
+ * Saving a reading auto-advances to the next house in the round.
  */
+
+(function () {
+    const cfg = document.getElementById('meterConfig');
+    window.CURRENT_USER_ID = cfg ? parseInt(cfg.dataset.userId, 10) : null;
+    window.CSRF_TOKEN = cfg ? cfg.dataset.csrfToken : null;
+    window.CURRENT_HOUSE = cfg ? JSON.parse(cfg.dataset.currentHouse || 'null') : null;
+})();
 
 const previousField = document.getElementById('previousReading');
 const currentField = document.getElementById('currentReading');

@@ -87,6 +87,14 @@ define('SESSION_TIMEOUT_SECONDS', 15 * 60);
 // else above - never hard-coded, always from .env.
 define('SMS_GATEWAY_API_KEY', env('SMS_GATEWAY_API_KEY', ''));
 
+// Improvement: real-time notifications. Port for ws/server.php, the
+// standalone WebSocket server that pushes live notification updates
+// (see ws/README.md). Purely additive - the app works fine without it
+// running; the header-rendered notification bell (includes/notifications.php)
+// is always there as the baseline, this just makes it update live instead
+// of only on page load.
+define('WS_PORT', (int) env('WS_PORT', 8090));
+
 // ------------------------------------------------------------
 // Improvement 18: global error handling.
 // APP_ENV=local (the default) shows full PHP errors on-screen, same as

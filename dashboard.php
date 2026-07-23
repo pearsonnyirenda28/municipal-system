@@ -270,13 +270,7 @@ require __DIR__ . '/includes/header.php';
 
 <?php if ($readerWorkload !== null): ?>
 <script src="/municipal-system/assets/js/offline-db.js"></script>
-<script>
-// Reuses the same IndexedDB the guided navigator writes to - this is
-// genuinely what's still sitting on this device, not a server-side guess.
-countPendingReadings().then(function (count) {
-    document.getElementById('unsyncedCount').textContent = count;
-});
-</script>
+<script src="/municipal-system/assets/js/dashboard-pending.js"></script>
 <?php endif; ?>
 
 <?php require __DIR__ . '/includes/footer.php'; ?>

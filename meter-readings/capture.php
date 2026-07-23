@@ -165,15 +165,14 @@ require __DIR__ . '/../includes/header.php';
         <?php endif; ?>
     </div>
 
-<script>
-window.CURRENT_USER_ID = <?= (int) $user['id'] ?>;
-window.CSRF_TOKEN = <?= json_encode(csrfToken()) ?>;
-window.CURRENT_HOUSE = <?= json_encode($current ? [
-    'id' => (int) $current['house_id'],
-    'number' => $current['house_number'],
-    'nextHouseId' => $nextHouse ? (int) $nextHouse['house_id'] : null,
-] : null) ?>;
-</script>
+<div id="meterConfig" style="display:none"
+     data-user-id="<?= (int) $user['id'] ?>"
+     data-csrf-token="<?= htmlspecialchars(csrfToken()) ?>"
+     data-current-house='<?= htmlspecialchars(json_encode($current ? [
+         'id' => (int) $current['house_id'],
+         'number' => $current['house_number'],
+         'nextHouseId' => $nextHouse ? (int) $nextHouse['house_id'] : null,
+     ] : null), ENT_QUOTES) ?>'></div>
 <script src="/municipal-system/assets/js/offline-db.js"></script>
 <script src="/municipal-system/assets/js/meter-reading.js"></script>
 
