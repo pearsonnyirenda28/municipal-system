@@ -141,6 +141,52 @@ file that is never uploaded to GitHub.
     - **Honest limitation**: the five status buttons are online-only for
       now - unlike meter readings, marking a house Skipped/Vacant/Locked/
       etc. does not yet work offline. See the roadmap section for why.
+## Version 3.5 - Intelligent Offline Synchronization (complete, on its own branch)
+
+Built on `version-3.5-offline-sync`, branched off `version-3.0-guided-field-operations`
+(not off `main`) since it depends directly on that round's work.
+
+- **Generalized offline queue** (`assets/js/offline-queue.js`) replaces the
+  meter-reading-only `offline-db.js` from Version 3.0. One IndexedDB
+  queue now handles every offline-capable action, and each queued
+  record carries exactly what the roadmap asked for: a UUID
+  (`clientRef`), a persistent per-device ID (`localStorage`, survives
+  across sessions on that device), the user ID, a timestamp, a synced
+  flag, and a retry count with the last error message if it keeps failing.
+- **Closed the gap flagged at the end of Version 3.0**: the five visit-status
+  buttons (Skip/Vacant/Locked/Illegal Connection/Revisit Required) are
+  offline-capable now, via a new JSON endpoint (`api/mark_visit.php`)
+  and `assets/js/status-actions.js`, following the exact same
+  online-first-fall-back-to-queue pattern meter readings already used.
+- **Fine issuing is offline-capable too** (`api/save_fine.php`,
+  `assets/js/fine-issue.js`) - same idempotency approach as meter
+  readings (a `client_ref` column added to `Fines`, checked before
+  insert so a retried sync can't create the same fine twice) and the
+  same "flag, don't reject" duplicate detection (same offender, amount,
+  and day, different `client_ref`).
+- **Conflict review screen** (`sync/conflicts.php`, Admin only) - every
+  "possible duplicate" flag raised during sync, across both meter
+  readings and fines, in one filterable list. This was a gap called out
+  in an earlier round's audit (flags were logged but had no screen);
+  it's closed now.
+- `fines/issue.php` keeps working exactly as before if JavaScript is
+  disabled (the original server-side POST handler is untouched) - the
+  offline behaviour is a progressive enhancement, not a replacement.
+
+**What Version 3.5 does NOT cover yet, on purpose:**
+- **Police Cases are not offline-capable.** The roadmap lists cases
+  alongside fines and meter readings for offline storage; only fines
+  and meter readings (plus visit status) were done this round to keep
+  the change reviewable. Cases would follow the identical pattern
+  (`api/save_case.php` + a client-side queue entry) whenever it's next.
+- **Damaged Meter reports, including photos, are not offline-capable.**
+  This is explicitly the hardest of the four (a photo has to be held as
+  binary data in IndexedDB and uploaded separately once back online),
+  and was deliberately left out of this round rather than rushed.
+- The old `meter-readings/mark_status.php` (the Version 3.0 form-POST
+  status handler) was deleted, fully superseded by `api/mark_visit.php`.
+  If you had that URL bookmarked anywhere, it's gone.
+
 
 ## 1. Requirements
 
@@ -220,9 +266,16 @@ Damaged Meters will correctly, but perhaps confusingly at first, show
 3. Capture a reading and click **Save Reading** - you'll see the orange
    "saved on this device" message, and the **Sync Now** counter will show
    1 pending.
-4. Go back online and click **Sync Now** (or just reload the page) - the
-   reading uploads to the database automatically and disappears from the
-   pending count.
+4. Still offline, try one of the **Skip / Vacant / Locked / Illegal
+   Connection / Revisit Required** buttons on the same page - same
+   behaviour, queued instead of failing outright.
+5. Go to **Fines > Issue a Fine**, still offline, and submit one - same
+   pattern again (this is a different queue entry type, but the same
+   underlying mechanism).
+6. Go back online and click **Sync Now** on any of those pages (or just
+   reload) - everything queued across *all three* actions uploads
+   together, since Version 3.5 unified them into one queue, not three
+   separate ones.
 
 ## 4. Accounts and roles
 
@@ -303,26 +356,35 @@ your real values.
 
 ### Pushing a feature branch (like this round's work)
 
-The repository already has `main` (Versions up to 2.5) and a second
-branch, `version-3.0-guided-field-operations`, with this round's changes
-on top of it - not merged into `main`, so you can review or test it
-separately before deciding to merge.
+The repository now has three branches:
+- `main` - Versions up to 2.5
+- `version-3.0-guided-field-operations` - branched off `main`
+- `version-3.5-offline-sync` - branched off `version-3.0-guided-field-operations`
+  (not off `main`, since it depends on that round's code)
+
+None of this is merged into `main` yet, so you can review or test each
+round separately before deciding to merge.
 
 ```
 git push -u origin main
 git push -u origin version-3.0-guided-field-operations
+git push -u origin version-3.5-offline-sync
 ```
 
-On GitHub, that gives you a branch you can open a Pull Request from
-(GitHub will offer a "Compare & pull request" button) to review the diff
-against `main` before merging - or you can merge it yourself once you're
-happy with it:
+On GitHub, that gives you branches you can open Pull Requests from
+(GitHub will offer a "Compare & pull request" button) to review each
+diff before merging - or merge them yourself, **in order**, once you're
+happy:
 
 ```
 git checkout main
 git merge version-3.0-guided-field-operations
+git merge version-3.5-offline-sync
 git push
 ```
+
+(Merging 3.5 before 3.0 would fail/conflict, since 3.5's history already
+contains 3.0's commits - merging 3.0 first, then 3.5, brings both in cleanly.)
 
 ## 8. Folder structure
 
@@ -348,15 +410,17 @@ municipal-system/
 ├── assets/
 │   ├── css/style.css
 │   └── js/
-│       ├── offline-db.js       <- IndexedDB wrapper
-│       ├── meter-reading.js    <- capture page logic + sync
+│       ├── offline-queue.js    <- generalized IndexedDB sync queue (Version 3.5)
+│       ├── meter-reading.js    <- capture page logic
+│       ├── status-actions.js   <- Skip/Vacant/Locked/... buttons (Version 3.5)
+│       ├── fine-issue.js       <- offline-capable fine issuing (Version 3.5)
 │       └── nav.js               <- hamburger menu toggle
 ├── cases/
 │   ├── list.php / create.php / update_status.php
 ├── fines/
 │   ├── list.php / issue.php / pay.php / receipt.php
 ├── meter-readings/
-│   ├── list.php / capture.php / mark_status.php
+│   ├── list.php / capture.php
 ├── damaged-meters/
 │   ├── list.php / report.php / update_status.php
 ├── wards/
@@ -367,47 +431,20 @@ municipal-system/
 │   ├── list.php / create.php / login_history.php
 ├── reports/
 │   ├── index.php / cases.php / fines.php / readings.php / damage.php
+├── sync/
+│   ├── conflicts.php           <- possible-duplicate review (Version 3.5)
 ├── uploads/damage_photos/     <- photo uploads land here (gitignored)
 └── api/
-    └── save_reading.php        <- JSON endpoint used by the offline JS
+    ├── save_reading.php        <- meter readings (Version 3.0)
+    ├── mark_visit.php          <- visit status marks (Version 3.5)
+    └── save_fine.php           <- fine issuing (Version 3.5)
 ```
 
 ## 9. What's built vs. what's still on the roadmap
 
 **Working now:** everything listed in Section 3 above, plus account
-lockout, session timeout, a full activity log of logins and data changes
-(Chapter 4, Section 5.2), and - as of this pass - all of the following:
-
-- **Duplicate reading review** (`meter-readings/duplicates.php`): the
-  "possible duplicate" flags raised during meter reading sync are no
-  longer just recorded in ActivityLogs with no way to act on them - there's
-  now a dedicated screen to keep one and discard the rest, or confirm both
-  were legitimate.
-- **Dashboard trend charts**: 6-month Cases/Fines and Meter
-  Readings/Abnormal charts, rendered as dependency-free inline SVG (no
-  charting library, so nothing extra to load - matters on a dashboard
-  that's sometimes viewed on the same patchy connections the offline
-  meter-reading flow exists for).
-- **PDF export** on all four reports (Cases, Fines, Meter Readings, Damaged
-  Meters), via a vendored copy of FPDF (`lib/fpdf.php` - no Composer
-  needed, consistent with the rest of this app).
-- **User management**: reset password, activate/deactivate accounts (with
-  safeguards against self-lockout and deactivating the last Admin).
-- **National ID / vehicle plate format validation** on case and fine
-  entry.
-- **Database indexes** on every column the list/report pages filter, sort,
-  or join by.
-- **Backups**: on-demand and scheduled (`cli_backup.php`), with restore.
-  See `docs/ADMIN_MANUAL.md` section 6.
-- **Notifications**: a bell in the header surfaces unpaid fines, abnormal
-  readings, pending repairs, unresolved duplicates, and sync failures,
-  scoped to what each role actually needs to see.
-- **Global error handling**: `APP_ENV=production` hides raw PHP errors from
-  visitors and logs them to `error_log.txt` instead, viewable by an Admin
-  at `error_log_viewer.php` without needing server/FTP access.
-- **Deployment**: `.htaccess` (blocks direct access to `.env`, the SQLite
-  file, backups, `.git`, and `setup_admin.php` under real Apache), plus
-  `docs/ADMIN_MANUAL.md` and `docs/USER_MANUAL.md` alongside this README.
+lockout, session timeout, and a full activity log of logins and data
+changes (Chapter 4, Section 5.2).
 
 **Designed in Chapter 4 but not yet built:**
 - A full offline-installable app shell (service worker) - right now the
@@ -417,19 +454,17 @@ lockout, session timeout, a full activity log of logins and data changes
   (`houses/edit.php`, Version 2.5), but Cases, Fines and Meter Readings
   still only support create, list, and status/payment updates, not full
   edit-in-place.
-- Offline capture for the Skip/Vacant/Locked visit-status buttons (see
-  `meter-readings/mark_status.php`) - only the reading itself queues
-  offline right now.
 
-**Version 2.0 through 4.0 (mobile/security, ward-based operations, guided
-field operations, and the system-improvements pass covering duplicates,
-charts, PDF export, user management, validation, indexes, backups,
-notifications, error handling, and deployment) are all complete** - see the
-changelog at the top of this file for the full list. **Not yet started:**
-richer offline sync with device IDs and retry counts, the full installable
-PWA, supervisor progress/assignment tools beyond the current dashboard
-widget, and the enterprise-tier features (Excel export, analytics, a REST
-API, 2FA).
+**Version 2.0, 2.5, 3.0, and 3.5 (mobile/security, ward-based operations,
+guided field operations, and offline synchronization) are all complete**
+- see the changelog at the top of this file for the full list, including
+what Version 3.5 deliberately left out (offline Cases, offline Damaged
+Meter reports with photos). **Not yet started:** Version 4.0's full
+installable PWA (a service worker so the app shell itself loads offline,
+not just the data on pages already visited), Version 4.5's
+progress/assignment tools beyond the current dashboard widget, and the
+enterprise-tier features from Version 5.0 (PDF/Excel export, analytics,
+a REST API, 2FA).
 
 **Found during this security pass, not yet fixed:**
 - `setup_database.php`, `setup_admin.php`, and `migrate_to_mysql.php` are
@@ -441,20 +476,9 @@ API, 2FA).
   exists), but `migrate_to_mysql.php` currently isn't - it'll happily
   re-run for anyone who reaches it. **Delete `migrate_to_mysql.php` once
   you've actually migrated**, the same way `setup_admin.php` tells you to
-  delete itself. `.htaccess` (section 10 below) blocks direct browser
-  access to `setup_admin.php` on a real Apache deployment, but not to
-  `migrate_to_mysql.php` or `setup_database.php` - worth tightening before
-  this ever sits on a real public-facing host rather than a local XAMPP
-  install.
+  delete itself. Worth revisiting properly (e.g. requiring an Admin login)
+  before this ever sits on a real public-facing host rather than a local
+  XAMPP install.
 
 These are natural next additions on top of the same database and folder
 structure - none of them require changing what has already been built.
-
-## 10. Manuals and deployment
-
-- **Admin tasks** (user management, backups, error log, deploying for
-  real): `docs/ADMIN_MANUAL.md`.
-- **Day-to-day usage** for every role (Officers, Clerks, Meter Readers,
-  Supervisors): `docs/USER_MANUAL.md`.
-- Both assume the setup in sections 1-2 above is already done.
-

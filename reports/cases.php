@@ -52,7 +52,6 @@ require __DIR__ . '/../includes/header.php';
         </div>
         <button type="submit" class="btn" style="margin-top:0;">Filter</button>
         <button type="button" class="btn secondary" style="margin-top:0;" onclick="window.print()">Print</button>
-        <a class="btn amber" style="margin-top:0;" href="cases_pdf.php?<?= htmlspecialchars(http_build_query($_GET)) ?>">Export PDF</a>
     </div>
 </form>
 

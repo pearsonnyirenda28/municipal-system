@@ -34,18 +34,17 @@ $ran = false;
 // Tables in dependency order - parents before children, so foreign keys
 // never point at a row that hasn't been copied across yet.
 $tables = [
-    'Users'          => ['user_id', 'username', 'password_hash', 'role', 'full_name', 'is_active', 'created_at'],
+    'Users'          => ['user_id', 'username', 'password_hash', 'role', 'full_name', 'created_at'],
     'Wards'          => ['ward_id', 'ward_name', 'description'],
     'WardAssignments' => ['assignment_id', 'ward_id', 'user_id', 'assigned_at'],
     'Houses'         => ['house_id', 'house_number', 'street', 'ward_id', 'owner_name', 'meter_number', 'address'],
     'Cases'          => ['case_id', 'case_number', 'offender_name', 'id_number', 'offence_type',
                           'description', 'status', 'officer_id', 'date_opened'],
     'Fines'          => ['fine_id', 'fine_number', 'case_id', 'offender_name', 'house_number',
-                          'vehicle_plate', 'offence_type', 'amount', 'payment_status', 'issued_by', 'date_issued'],
+                          'vehicle_plate', 'offence_type', 'amount', 'payment_status', 'issued_by', 'date_issued', 'client_ref'],
     'Payments'       => ['payment_id', 'fine_id', 'amount_received', 'date_paid', 'received_by', 'receipt_number'],
     'MeterReadings'  => ['reading_id', 'house_id', 'previous_reading', 'current_reading', 'consumption',
-                          'is_abnormal', 'reader_id', 'date_taken', 'client_ref',
-                          'is_duplicate_flagged', 'duplicate_resolved_by', 'duplicate_resolved_at'],
+                          'is_abnormal', 'reader_id', 'date_taken', 'client_ref'],
     'DamagedMeters'  => ['damage_id', 'house_id', 'description', 'photo_path', 'reported_by',
                           'date_reported', 'repair_status', 'date_fixed'],
     'HouseVisits'    => ['visit_id', 'house_id', 'reader_id', 'visit_date', 'status', 'reading_id', 'notes', 'updated_at'],

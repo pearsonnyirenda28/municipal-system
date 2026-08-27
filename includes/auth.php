@@ -27,17 +27,11 @@ if (!headers_sent()) {
     header('X-Content-Type-Options: nosniff');   // stops the browser "guessing" a file is HTML/JS when it isn't
     header('X-Frame-Options: DENY');              // stops this app being loaded inside someone else's <iframe> (clickjacking)
     header('Referrer-Policy: same-origin');
-    // No 'unsafe-inline' for scripts: every <script> tag in this app
-    // loads from assets/js/*.js. Server-side values a script needs
-    // (a CSRF token, a WebSocket port, a house record) are passed via
-    // data-* attributes on a DOM element instead of printed into an
-    // inline <script> block - CSP blocks those outright with no
-    // exception, which caught two real bugs during development where a
-    // value silently never reached the page's JS at all.
-    // connect-src additionally allows ws:/wss: for the optional
-    // real-time notification connection (ws/server.php) - everything
-    // else (scripts, fetch/XHR to other origins, images) stays 'self'.
-    header("Content-Security-Policy: default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self' ws: wss:");
+    // Deliberately no 'unsafe-inline' style/script blanket allowance beyond what the app
+    // actually uses - all JS here lives in assets/js/*.js, not inline <script> blocks with
+    // untrusted content, and the few inline <script> tags only ever print server-generated
+    // integers/tokens, never raw user input.
+    header("Content-Security-Policy: default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'");
 }
 
 const MAX_FAILED_LOGINS = 5;
@@ -58,23 +52,6 @@ function requireLogin(): void
         session_destroy();
         header('Location: /municipal-system/login.php?timeout=1');
         exit;
-    }
-
-    // Improvement 11: an Admin deactivating a user should take effect
-    // immediately, not just block their *next* login - otherwise a
-    // currently-open session keeps working until it naturally times out.
-    static $activeChecked = false;
-    if (!$activeChecked) {
-        $activeChecked = true;
-        $stmt = getDb()->prepare('SELECT is_active FROM Users WHERE user_id = :id');
-        $stmt->execute(['id' => $_SESSION['user_id']]);
-        $row = $stmt->fetch();
-        if (!$row || !$row['is_active']) {
-            session_unset();
-            session_destroy();
-            header('Location: /municipal-system/login.php?deactivated=1');
-            exit;
-        }
     }
 
     $_SESSION['last_activity'] = time();

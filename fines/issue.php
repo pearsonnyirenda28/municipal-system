@@ -6,7 +6,6 @@
  */
 require_once __DIR__ . '/../includes/db.php';
 require_once __DIR__ . '/../includes/auth.php';
-require_once __DIR__ . '/../includes/validators.php';
 requireRole(['Admin', 'Officer']);
 
 $offenceTypes = ['Littering', 'Illegal Vending', 'Reckless Driving', 'Noise Violation', 'Other'];
@@ -41,11 +40,6 @@ function validateFineInput(array $data): array
     }
     if (empty($data['house_number']) && empty($data['vehicle_plate'])) {
         $errors[] = 'Provide either a house number or a vehicle plate.';
-    }
-    // Improvement 14: format validation, added alongside the fields
-    // documented in Chapter 5, Section 2.2.
-    if (!empty($data['vehicle_plate']) && !isValidVehiclePlate($data['vehicle_plate'])) {
-        $errors[] = 'Vehicle plate must be in the format ABC 1234 (2-3 letters, 3-4 digits).';
     }
     return $errors;
 }
@@ -114,10 +108,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     $errors = validateFineInput($old);
 
-    if (!$errors && $old['vehicle_plate'] !== '') {
-        $old['vehicle_plate'] = normalizeVehiclePlate($old['vehicle_plate']);
-    }
-
     if (!$errors) {
         $result = saveFine(getDb(), $old, currentUser()['id'], $caseId ?: null);
         if ($result['success']) {
@@ -136,8 +126,16 @@ require __DIR__ . '/../includes/header.php';
 <?php if ($linkedCase): ?>
     <p class="subtitle">Linked to case <strong><?= htmlspecialchars($linkedCase['case_number']) ?></strong>.</p>
 <?php else: ?>
-<p class="subtitle">Fields marked with a house number or vehicle plate - at least one is required.</p>
+<p class="subtitle">Fields marked with a house number or vehicle plate - at least one is required.
+    Works offline too - see the Sync Now button below the form.</p>
 <?php endif; ?>
+
+<div id="offlineFineNotice" class="alert warning" style="display:none;">
+    You are currently offline. This fine will be saved on this device and synced automatically
+    once your connection is back.
+</div>
+<div id="pendingFineNotice" class="alert warning" style="display:none;"></div>
+<div id="fineFormAlert"></div>
 
 <?php if ($successFineId): ?>
     <div class="alert success">
@@ -153,9 +151,9 @@ require __DIR__ . '/../includes/header.php';
 <?php endif; ?>
 
 <div class="form-panel">
-    <form method="post" novalidate>
+    <form method="post" id="fineForm" novalidate>
         <?= csrfField() ?>
-        <?php if ($caseId): ?><input type="hidden" name="case_id" value="<?= $caseId ?>"><?php endif; ?>
+        <?php if ($caseId): ?><input type="hidden" name="case_id" id="case_id" value="<?= $caseId ?>"><?php endif; ?>
         <label for="offender_name">Offender name</label>
         <input type="text" id="offender_name" name="offender_name" required
                value="<?= htmlspecialchars($old['offender_name']) ?>">
@@ -182,9 +180,17 @@ require __DIR__ . '/../includes/header.php';
         <input type="number" id="amount" name="amount" step="0.01" min="0.01"
                value="<?= htmlspecialchars($old['amount']) ?>">
 
-        <button type="submit" class="btn">Save Fine</button>
+        <button type="submit" id="btnSaveFine" class="btn">Save Fine</button>
+        <button type="button" id="btnSyncFines" class="btn secondary">Sync Now (<span id="pendingFineCount">0</span> pending)</button>
         <a href="list.php" class="btn secondary">Cancel</a>
     </form>
 </div>
+
+<script>
+window.CURRENT_USER_ID = <?= (int) currentUser()['id'] ?>;
+window.CSRF_TOKEN = <?= json_encode(csrfToken()) ?>;
+</script>
+<script src="/municipal-system/assets/js/offline-queue.js"></script>
+<script src="/municipal-system/assets/js/fine-issue.js"></script>
 
 <?php require __DIR__ . '/../includes/footer.php'; ?>

@@ -17,13 +17,6 @@
 # this line out if you'd rather keep it in the repo for others.
 # setup_admin.php
 
-# Database backups - real data dumps, not source code (Improvement 16).
-/backups/*.sql
-!/backups/.gitkeep
-
-# Error log - runtime data, not source code (Improvement 18).
-/error_log.txt
-
 # OS / editor noise
 .DS_Store
 Thumbs.db

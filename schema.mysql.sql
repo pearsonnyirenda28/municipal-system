@@ -24,7 +24,6 @@ CREATE TABLE IF NOT EXISTS Users (
     password_hash  VARCHAR(255) NOT NULL,
     role           ENUM('Admin','Officer','MeterReader','Clerk','PoliceSupervisor','MeterSupervisor') NOT NULL,
     full_name      VARCHAR(60) NOT NULL,
-    is_active      BOOLEAN NOT NULL DEFAULT TRUE,
     created_at     DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB;
 
@@ -59,6 +58,7 @@ CREATE TABLE IF NOT EXISTS Fines (
     payment_status  ENUM('Unpaid','Paid') NOT NULL DEFAULT 'Unpaid',
     issued_by       INT NULL,
     date_issued     DATETIME NOT NULL,
+    client_ref      VARCHAR(40) NULL UNIQUE,
     FOREIGN KEY (case_id) REFERENCES Cases(case_id) ON DELETE SET NULL,
     FOREIGN KEY (issued_by) REFERENCES Users(user_id) ON DELETE SET NULL,
     CONSTRAINT chk_fine_amount CHECK (amount > 0)
@@ -131,12 +131,8 @@ CREATE TABLE IF NOT EXISTS MeterReadings (
     reader_id         INT NULL,
     date_taken        DATE NOT NULL,
     client_ref        VARCHAR(40) NULL,
-    is_duplicate_flagged BOOLEAN NOT NULL DEFAULT FALSE,
-    duplicate_resolved_by INT NULL,
-    duplicate_resolved_at DATETIME NULL,
     FOREIGN KEY (house_id) REFERENCES Houses(house_id) ON DELETE CASCADE,
     FOREIGN KEY (reader_id) REFERENCES Users(user_id) ON DELETE SET NULL,
-    FOREIGN KEY (duplicate_resolved_by) REFERENCES Users(user_id) ON DELETE SET NULL,
     CONSTRAINT chk_reading_order CHECK (current_reading >= previous_reading),
     UNIQUE KEY uniq_house_date (house_id, date_taken, client_ref)
 ) ENGINE=InnoDB;
@@ -189,39 +185,6 @@ CREATE TABLE IF NOT EXISTS ActivityLogs (
     date_time           DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (user_id) REFERENCES Users(user_id) ON DELETE SET NULL
 ) ENGINE=InnoDB;
-
--- ============================================================
--- Indexes (Improvement 15: Database Performance)
--- InnoDB already creates an implicit index on every FK column, so the
--- FK ones here are mostly for documentation/consistency with
--- schema.sql (SQLite has no such auto-indexing) - the ones that matter
--- most on MySQL are the non-FK filter/sort columns: status,
--- payment_status, date_* , is_abnormal, is_duplicate_flagged, role,
--- is_active.
--- ============================================================
-CREATE INDEX idx_cases_status        ON Cases(status);
-CREATE INDEX idx_cases_officer       ON Cases(officer_id);
-CREATE INDEX idx_cases_date_opened   ON Cases(date_opened);
-
-CREATE INDEX idx_fines_status        ON Fines(payment_status);
-CREATE INDEX idx_fines_date_issued   ON Fines(date_issued);
-
-CREATE INDEX idx_wardassign_ward     ON WardAssignments(ward_id);
-
-CREATE INDEX idx_houses_number       ON Houses(house_number);
-
-CREATE INDEX idx_readings_date       ON MeterReadings(date_taken);
-CREATE INDEX idx_readings_abnormal   ON MeterReadings(is_abnormal);
-CREATE INDEX idx_readings_dupflag    ON MeterReadings(is_duplicate_flagged);
-
-CREATE INDEX idx_damaged_status      ON DamagedMeters(repair_status);
-
-CREATE INDEX idx_visits_date         ON HouseVisits(visit_date);
-
-CREATE INDEX idx_activitylogs_time   ON ActivityLogs(date_time);
-
-CREATE INDEX idx_users_role          ON Users(role);
-CREATE INDEX idx_users_active        ON Users(is_active);
 
 -- ============================================================
 -- Seed data - only useful if you are setting up MySQL from scratch

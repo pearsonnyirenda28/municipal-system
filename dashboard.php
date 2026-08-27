@@ -12,7 +12,6 @@
  */
 require_once __DIR__ . '/includes/db.php';
 require_once __DIR__ . '/includes/auth.php';
-require_once __DIR__ . '/includes/charts.php';
 requireLogin();
 
 $db = getDb();
@@ -31,45 +30,6 @@ if ($showPolice) {
 if ($showMeter) {
     $abnormalReadings = $db->query("SELECT COUNT(*) c FROM MeterReadings WHERE is_abnormal = 1 AND " . dbWithinLast('date_taken', 30, 'DAY'))->fetch();
     $pendingRepairs   = $db->query("SELECT COUNT(*) c FROM DamagedMeters WHERE repair_status != 'Fixed'")->fetch();
-}
-
-// Improvement 3: 6-month trend charts. Six months of history is a small
-// enough query (indexed on the date columns already used by the report
-// filters) that pulling it in on every dashboard load is not a concern.
-$TREND_MONTHS = 6;
-
-if ($showPolice) {
-    $caseMonthKey = dbMonthKey('date_opened');
-    $caseRows = $db->query(
-        "SELECT {$caseMonthKey} AS month, COUNT(*) AS cnt FROM Cases
-         WHERE " . dbWithinLast('date_opened', $TREND_MONTHS, 'MONTH') . " GROUP BY month"
-    )->fetchAll();
-    $fineMonthKey = dbMonthKey('date_issued');
-    $fineRows = $db->query(
-        "SELECT {$fineMonthKey} AS month, COUNT(*) AS cnt FROM Fines
-         WHERE " . dbWithinLast('date_issued', $TREND_MONTHS, 'MONTH') . " GROUP BY month"
-    )->fetchAll();
-
-    $caseTrend = monthlyBuckets($caseRows, $TREND_MONTHS, ['cnt']);
-    $fineTrend = monthlyBuckets($fineRows, $TREND_MONTHS, ['cnt']);
-
-    // Merge into one set of buckets with two series, since both share the
-    // same month range.
-    $policeTrend = [];
-    foreach ($caseTrend as $i => $b) {
-        $policeTrend[] = ['label' => $b['label'], 'cases' => $b['cnt'], 'fines' => $fineTrend[$i]['cnt']];
-    }
-}
-
-if ($showMeter) {
-    $readingMonthKey = dbMonthKey('date_taken');
-    $readingRows = $db->query(
-        "SELECT {$readingMonthKey} AS month, COUNT(*) AS cnt,
-                SUM(CASE WHEN is_abnormal = 1 THEN 1 ELSE 0 END) AS abnormal_cnt
-         FROM MeterReadings
-         WHERE " . dbWithinLast('date_taken', $TREND_MONTHS, 'MONTH') . " GROUP BY month"
-    )->fetchAll();
-    $meterTrend = monthlyBuckets($readingRows, $TREND_MONTHS, ['cnt', 'abnormal_cnt']);
 }
 
 // Version 3.0 - Meter Reader Dashboard: daily workload, progress,
@@ -210,20 +170,6 @@ require __DIR__ . '/includes/header.php';
     </div>
 <?php endif; ?>
 
-<?php if ($showPolice): ?>
-    <?= renderMonthlyBarChart($policeTrend, [
-        'cases' => ['label' => 'Cases Opened', 'color' => '#2C7873'],
-        'fines' => ['label' => 'Fines Issued', 'color' => '#E0A526'],
-    ], 'Cases & Fines - Last 6 Months') ?>
-<?php endif; ?>
-
-<?php if ($showMeter): ?>
-    <?= renderMonthlyBarChart($meterTrend, [
-        'cnt'          => ['label' => 'Readings Captured', 'color' => '#2C7873'],
-        'abnormal_cnt' => ['label' => 'Abnormal Readings', 'color' => '#C0392B'],
-    ], 'Meter Readings - Last 6 Months') ?>
-<?php endif; ?>
-
 <h2>Quick actions</h2>
 <div class="card-grid">
     <?php if (in_array($role, ['Officer', 'Admin'], true)): ?>
@@ -269,8 +215,15 @@ require __DIR__ . '/includes/header.php';
 </div>
 
 <?php if ($readerWorkload !== null): ?>
-<script src="/municipal-system/assets/js/offline-db.js"></script>
-<script src="/municipal-system/assets/js/dashboard-pending.js"></script>
+<script src="/municipal-system/assets/js/offline-queue.js"></script>
+<script>
+// Reuses the same IndexedDB queue the guided navigator writes to (any
+// type - readings, visit-status marks) - this is genuinely what's still
+// sitting on this device, not a server-side guess.
+countPending().then(function (count) {
+    document.getElementById('unsyncedCount').textContent = count;
+});
+</script>
 <?php endif; ?>
 
 <?php require __DIR__ . '/includes/footer.php'; ?>

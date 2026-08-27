@@ -1,0 +1,117 @@
+{
+    "created_at": "2026-07-20T08:23:01+02:00",
+    "driver": "sqlite",
+    "tables": {
+        "Users": [
+            {
+                "user_id": 1,
+                "username": "admin",
+                "password_hash": "$2y$10$pT4h77tf4yGpzJKfsaTn1.15R1Pkgm6g1WjVIgyTVO4Poj5P8EqDS",
+                "role": "Admin",
+                "full_name": "admin",
+                "is_active": 1,
+                "created_at": "2026-07-20 06:16:23"
+            }
+        ],
+        "Wards": [
+            {
+                "ward_id": 1,
+                "ward_name": "Ward 1",
+                "description": "Dulivhadzimu area"
+            },
+            {
+                "ward_id": 2,
+                "ward_name": "Ward 3",
+                "description": "Beitbridge North area"
+            }
+        ],
+        "Cases": [],
+        "Fines": [],
+        "Payments": [],
+        "WardAssignments": [],
+        "Houses": [
+            {
+                "house_id": 1,
+                "house_number": "142",
+                "street": "North Road",
+                "ward_id": 2,
+                "owner_name": "T. Moyo",
+                "meter_number": "MTR-0142",
+                "address": "142 Beitbridge North"
+            },
+            {
+                "house_id": 2,
+                "house_number": "087",
+                "street": "Dulivhadzimu Street",
+                "ward_id": 1,
+                "owner_name": "S. Ncube",
+                "meter_number": "MTR-0087",
+                "address": "87 Dulivhadzimu"
+            },
+            {
+                "house_id": 3,
+                "house_number": "215",
+                "street": "North Road",
+                "ward_id": 2,
+                "owner_name": "P. Dube",
+                "meter_number": "MTR-0215",
+                "address": "215 Beitbridge North"
+            }
+        ],
+        "MeterReadings": [
+            {
+                "reading_id": 1,
+                "house_id": 2,
+                "previous_reading": 1240,
+                "current_reading": 1240,
+                "consumption": 0,
+                "is_abnormal": 0,
+                "reader_id": null,
+                "date_taken": "2026-07-20",
+                "client_ref": "seed-2",
+                "is_duplicate_flagged": 0,
+                "duplicate_resolved_by": null,
+                "duplicate_resolved_at": null
+            },
+            {
+                "reading_id": 2,
+                "house_id": 1,
+                "previous_reading": 1240,
+                "current_reading": 1240,
+                "consumption": 0,
+                "is_abnormal": 0,
+                "reader_id": null,
+                "date_taken": "2026-07-20",
+                "client_ref": "seed-1",
+                "is_duplicate_flagged": 0,
+                "duplicate_resolved_by": null,
+                "duplicate_resolved_at": null
+            },
+            {
+                "reading_id": 3,
+                "house_id": 3,
+                "previous_reading": 1240,
+                "current_reading": 1240,
+                "consumption": 0,
+                "is_abnormal": 0,
+                "reader_id": null,
+                "date_taken": "2026-07-20",
+                "client_ref": "seed-3",
+                "is_duplicate_flagged": 0,
+                "duplicate_resolved_by": null,
+                "duplicate_resolved_at": null
+            }
+        ],
+        "DamagedMeters": [],
+        "HouseVisits": [],
+        "ActivityLogs": [
+            {
+                "log_id": 1,
+                "user_id": 1,
+                "action_description": "Logged in",
+                "ip_address": "::1",
+                "date_time": "2026-07-20 06:16:36"
+            }
+        ]
+    }
+}
