@@ -25,7 +25,7 @@ if (session_status() === PHP_SESSION_NONE) {
 // ------------------------------------------------------------
 if (!headers_sent()) {
     header('X-Content-Type-Options: nosniff');   // stops the browser "guessing" a file is HTML/JS when it isn't
-    header('X-Frame-Options: DENY');              // stops this app being loaded inside someone else's <iframe> (clickjacking)
+    header('X-Frame-Options: DENY');             // stops this app being loaded inside someone else's <iframe> (clickjacking)
     header('Referrer-Policy: same-origin');
     // Deliberately no 'unsafe-inline' style/script blanket allowance beyond what the app
     // actually uses - all JS here lives in assets/js/*.js, not inline <script> blocks with
@@ -163,14 +163,26 @@ function verifyCsrf(): void
 }
 
 /**
- * Same check as verifyCsrf(), but for the JSON API (api/save_reading.php)
+ * Same check as verifyCsrf(), but for the JSON API (e.g. api/save_fine.php, api/save_reading.php)
  * where the token travels as a custom header instead of a form field,
  * since that endpoint is called via fetch(), not a submitted <form>.
  */
 function verifyCsrfHeader(): void
 {
-    $submitted = $_SERVER['HTTP_X_CSRF_TOKEN'] ?? '';
-    $expected  = $_SESSION['csrf_token'] ?? '';
+    $headers = function_exists('getallheaders') ? getallheaders() : [];
+    $submitted = '';
+    foreach ($headers as $key => $value) {
+        if (strcasecmp($key, 'X-CSRF-Token') === 0) {
+            $submitted = $value;
+            break;
+        }
+    }
+    
+    if ($submitted === '') {
+        $submitted = $_SERVER['HTTP_X_CSRF_TOKEN'] ?? $_SERVER['REDIRECT_HTTP_X_CSRF_TOKEN'] ?? '';
+    }
+
+    $expected = $_SESSION['csrf_token'] ?? '';
 
     if ($submitted === '' || $expected === '' || !hash_equals($expected, $submitted)) {
         http_response_code(403);
@@ -222,4 +234,3 @@ function passwordPolicyErrors(string $password, string $username = '', string $f
 
     return $errors;
 }
-

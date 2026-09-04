@@ -95,10 +95,15 @@ async function cacheFirst(request) {
     const cached = await caches.match(request);
     const networkFetch = fetch(request).then((response) => {
         if (response.ok) {
-            caches.open(CACHE_VERSION).then((cache) => cache.put(request, response.clone()));
+            // 1. Clone immediately while the response is still untouched
+            const responseToCache = response.clone();
+            // 2. Open cache and store the clone
+            caches.open(CACHE_VERSION).then((cache) => cache.put(request, responseToCache));
         }
+        // 3. Return original response
         return response;
     }).catch(() => null);
+
     return cached || (await networkFetch) || new Response('', { status: 504 });
 }
 
@@ -106,8 +111,12 @@ async function networkFirstForPages(request) {
     try {
         const response = await fetch(request);
         if (response.ok) {
-            caches.open(CACHE_VERSION).then((cache) => cache.put(request, response.clone()));
+            // 1. Clone immediately
+            const responseToCache = response.clone();
+            // 2. Open cache and store the clone
+            caches.open(CACHE_VERSION).then((cache) => cache.put(request, responseToCache));
         }
+        // 3. Return original response
         return response;
     } catch (err) {
         const cached = await caches.match(request);

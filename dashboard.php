@@ -78,7 +78,7 @@ if ($role === 'Admin') {
 $roleLabels = [
     'Admin'            => 'Administrator',
     'Officer'          => 'Police Officer',
-    'Clerk'             => 'Clerk / Cashier',
+    'Clerk'            => 'Clerk / Cashier',
     'MeterReader'      => 'Meter Reader',
     'PoliceSupervisor' => 'Police Supervisor',
     'MeterSupervisor'  => 'Meter Reading Supervisor',

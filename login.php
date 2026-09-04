@@ -63,34 +63,50 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Login &mdash; <?= htmlspecialchars(APP_NAME) ?></title>
 <link rel="stylesheet" href="assets/css/style.css">
+
+<!-- Version 4.0 - installable PWA -->
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#16223E">
+<link rel="apple-touch-icon" href="assets/icons/icon-192.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 </head>
-<body>
-<div class="login-wrap">
-    <div class="login-box">
-        <h1><?= htmlspecialchars(APP_NAME) ?></h1>
-        <p class="subtitle">Beitbridge Municipality</p>
+<body class="login-body">
 
-        <?php if ($error): ?>
-            <div class="alert error"><?= htmlspecialchars($error) ?></div>
-        <?php endif; ?>
+<div class="login-card">
+    <div class="brand-title"><?= htmlspecialchars(APP_NAME) ?></div>
+    <div class="brand-sub">Beitbridge Municipality</div>
 
-        <form method="post" novalidate>
-            <?= csrfField() ?>
+    <?php if ($error): ?>
+        <div class="alert alert-warning" role="alert"><?= htmlspecialchars($error) ?></div>
+    <?php endif; ?>
+
+    <form method="post" novalidate autocomplete="off">
+        <?= csrfField() ?>
+
+        <div class="form-group">
             <label for="username">Username</label>
             <input type="text" id="username" name="username" required autofocus
-                   value="<?= htmlspecialchars($_POST['username'] ?? '') ?>">
+                   value="<?= htmlspecialchars($_POST['username'] ?? '') ?>"
+                   placeholder="Enter your username">
+        </div>
 
+        <div class="form-group">
             <label for="password">Password</label>
-            <input type="password" id="password" name="password" required>
+            <input type="password" id="password" name="password" required
+                   placeholder="Enter your password">
+        </div>
 
-            <button type="submit" class="btn" style="width:100%;">Login</button>
-        </form>
+        <button type="submit" class="btn-login">Login</button>
+    </form>
 
-        <p style="font-size:0.75rem;color:#8a94a3;margin-top:18px;">
-            First time setting this system up? Run <code>setup_admin.php</code> once to create
-            the first Administrator account, then delete that file.
-        </p>
-    </div>
+    <p style="font-size:0.8rem; color: var(--text-muted); margin-top: 1.5rem; line-height: 1.4;">
+        First time setting this system up? Run <code>setup_admin.php</code> once to create
+        the first Administrator account, then delete that file.
+    </p>
 </div>
+
+<script src="assets/js/register-sw.js"></script>
 </body>
 </html>

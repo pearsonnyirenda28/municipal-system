@@ -14,6 +14,11 @@ const offlineFineNotice = document.getElementById('offlineFineNotice');
 const pendingFineNotice = document.getElementById('pendingFineNotice');
 const fineFormAlert = document.getElementById('fineFormAlert');
 
+// Read config values securely from data attributes to satisfy CSP
+const configEl = document.getElementById('fineAppConfig');
+const currentUserId = configEl ? parseInt(configEl.dataset.currentUserId, 10) : 0;
+const csrfToken = configEl ? configEl.dataset.csrfToken : '';
+
 function showFineAlert(message, type) {
     fineFormAlert.innerHTML = `<div class="alert ${type}">${message}</div>`;
 }
@@ -74,7 +79,7 @@ async function saveFineRecord(payload) {
         if (navigator.onLine) {
             const response = await fetch('/municipal-system/api/save_fine.php', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': window.CSRF_TOKEN },
+                headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken },
                 credentials: 'same-origin',
                 body: JSON.stringify(payload),
             });
@@ -87,15 +92,15 @@ async function saveFineRecord(payload) {
                 'success');
             fineForm.reset();
         } else {
-            await queueRecord('fine', payload, window.CURRENT_USER_ID);
+            await queueRecord('fine', payload, currentUserId);
             showFineAlert('No connection - this fine has been saved on this device and will sync ' +
-                          'automatically once you are back online.', 'warning');
+                'automatically once you are back online.', 'warning');
             fineForm.reset();
         }
     } catch (err) {
-        await queueRecord('fine', payload, window.CURRENT_USER_ID);
+        await queueRecord('fine', payload, currentUserId);
         showFineAlert(`Could not reach the server - the fine was saved on this device instead. ` +
-                      `It will sync automatically. (${err.message})`, 'warning');
+            `It will sync automatically. (${err.message})`, 'warning');
         fineForm.reset();
         console.warn('Server save failed, queued offline instead:', err.message);
     }

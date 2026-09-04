@@ -67,7 +67,7 @@ function saveFine(PDO $db, array $data, int $issuedBy, ?int $caseId): array
         $fineId = generateFineId($db);
         $stmt = $db->prepare(
             'INSERT INTO Fines (fine_number, case_id, offender_name, house_number, vehicle_plate,
-                                 offence_type, amount, payment_status, issued_by, date_issued)
+                               offence_type, amount, payment_status, issued_by, date_issued)
              VALUES (:fine_number, :case_id, :offender_name, :house_number, :vehicle_plate,
                      :offence_type, :amount, "Unpaid", :issued_by, CURRENT_TIMESTAMP)'
         );
@@ -150,7 +150,11 @@ require __DIR__ . '/../includes/header.php';
     </div>
 <?php endif; ?>
 
-<div class="form-panel">
+<!-- Pass configuration variables securely via data attributes to satisfy CSP -->
+<div class="form-panel" 
+     id="fineAppConfig" 
+     data-current-user-id="<?= (int) currentUser()['id'] ?>" 
+     data-csrf-token="<?= htmlspecialchars(csrfToken(), ENT_QUOTES, 'UTF-8') ?>">
     <form method="post" id="fineForm" novalidate>
         <?= csrfField() ?>
         <?php if ($caseId): ?><input type="hidden" name="case_id" id="case_id" value="<?= $caseId ?>"><?php endif; ?>
@@ -186,10 +190,6 @@ require __DIR__ . '/../includes/header.php';
     </form>
 </div>
 
-<script>
-window.CURRENT_USER_ID = <?= (int) currentUser()['id'] ?>;
-window.CSRF_TOKEN = <?= json_encode(csrfToken()) ?>;
-</script>
 <script src="/municipal-system/assets/js/offline-queue.js"></script>
 <script src="/municipal-system/assets/js/fine-issue.js"></script>
 

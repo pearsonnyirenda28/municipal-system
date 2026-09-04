@@ -43,7 +43,7 @@ require __DIR__ . '/../includes/header.php';
             </select>
         </div>
         <button type="submit" class="btn" style="margin-top:0;">Filter</button>
-        <button type="button" class="btn secondary" style="margin-top:0;" onclick="window.print()">Print</button>
+        <button type="button" id="printBtn" class="btn secondary" style="margin-top:0;">Print</button>
     </div>
 </form>
 
