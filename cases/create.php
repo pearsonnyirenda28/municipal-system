@@ -24,6 +24,8 @@ function generateCaseNumber(PDO $db): string
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    verifyCsrf();
+
     $old = [
         'offender_name' => trim($_POST['offender_name'] ?? ''),
         'id_number'     => trim($_POST['id_number'] ?? ''),
@@ -83,6 +85,7 @@ require __DIR__ . '/../includes/header.php';
 
 <div class="form-panel">
     <form method="post">
+        <?= csrfField() ?>
         <label for="offender_name">Offender name</label>
         <input type="text" id="offender_name" name="offender_name" required value="<?= htmlspecialchars($old['offender_name']) ?>">
 

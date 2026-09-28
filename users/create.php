@@ -2,19 +2,22 @@
 /**
  * users/create.php
  * Replaces the manual SQL insert described in the original README - now
- * Admins can create Officer, MeterReader, Clerk and Supervisor accounts
+ * Admins can create Officer, MeterReader, Clerk, PoliceSupervisor and
+ * MeterSupervisor accounts
  * (and other Admins) straight from the browser.
  */
 require_once __DIR__ . '/../includes/db.php';
 require_once __DIR__ . '/../includes/auth.php';
 requireRole(['Admin']);
 
-$roles = ['Officer', 'MeterReader', 'Clerk', 'Supervisor', 'Admin'];
+$roles = ['Officer', 'MeterReader', 'Clerk', 'PoliceSupervisor', 'MeterSupervisor', 'Admin'];
 $errors = [];
 $old = ['full_name' => '', 'username' => '', 'role' => ''];
 $success = false;
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    verifyCsrf();
+
     $old = [
         'full_name' => trim($_POST['full_name'] ?? ''),
         'username'  => trim($_POST['username'] ?? ''),
@@ -25,7 +28,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($old['full_name'] === '') $errors[] = 'Full name is required.';
     if ($old['username'] === '') $errors[] = 'Username is required.';
     if (!in_array($old['role'], $roles, true)) $errors[] = 'Please select a valid role.';
-    if (strlen($password) < 6) $errors[] = 'Password must be at least 6 characters.';
+    $errors = array_merge($errors, passwordPolicyErrors($password, $old['username'], $old['full_name']));
 
     if (!$errors) {
         $db = getDb();
@@ -64,6 +67,7 @@ require __DIR__ . '/../includes/header.php';
 
 <div class="form-panel">
     <form method="post">
+        <?= csrfField() ?>
         <label for="full_name">Full name</label>
         <input type="text" id="full_name" name="full_name" required value="<?= htmlspecialchars($old['full_name']) ?>">
 
@@ -79,7 +83,10 @@ require __DIR__ . '/../includes/header.php';
         </select>
 
         <label for="password">Temporary password</label>
-        <input type="password" id="password" name="password" required minlength="6">
+        <input type="password" id="password" name="password" required minlength="8">
+        <p style="font-size:0.78rem;color:#5B6472;margin:6px 0 0;">
+            At least 8 characters, with an uppercase letter, a lowercase letter, and a number.
+        </p>
 
         <button type="submit" class="btn">Create Account</button>
         <a href="list.php" class="btn secondary">Cancel</a>

@@ -21,6 +21,8 @@ if (!$report) {
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    verifyCsrf();
+
     $newStatus = $_POST['repair_status'] ?? '';
     if (in_array($newStatus, ['Pending', 'In Progress', 'Fixed'], true)) {
         $dateFixed = $newStatus === 'Fixed' ? date('Y-m-d') : null;
@@ -40,6 +42,7 @@ require __DIR__ . '/../includes/header.php';
 
 <div class="form-panel">
     <form method="post">
+        <?= csrfField() ?>
         <input type="hidden" name="damage_id" value="<?= $damageId ?>">
         <label for="repair_status">Repair status</label>
         <select id="repair_status" name="repair_status">

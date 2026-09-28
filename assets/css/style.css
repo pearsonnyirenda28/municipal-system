@@ -1,255 +1,2020 @@
-/* assets/css/style.css
-   Colour palette matches the diagrams and presentation built earlier
-   for this project: navy #16223E, teal #2C7873, amber #E8A33D. */
+/* ==========================================================================
+   OFFICE & WORKSPACE GLASSMORPHISM THEME (PROFESSIONAL / MUTED PALETTE)
+   Location: assets/css/style.css
+   ========================================================================== */
 
 :root {
-    --navy: #16223E;
-    --navy-light: #24345C;
-    --teal: #2C7873;
-    --teal-light: #E4F1EF;
-    --amber: #E8A33D;
-    --amber-light: #FCEEDB;
-    --bg: #F7F9FB;
-    --text: #1F2937;
-    --muted: #5B6472;
-    --border: #E1E6ED;
-    --error: #C0392B;
-    --error-bg: #FDEDEC;
+    /* Muted Workspace Surface & Glass Tokens */
+    --bg-gradient: linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #0f172a 100%);
+    --glass-topbar-bg: rgba(15, 23, 42, 0.88);
+    --glass-drawer-bg: rgba(15, 23, 42, 0.96);
+    --glass-card-bg: rgba(255, 255, 255, 0.03);
+    --glass-card-hover: rgba(255, 255, 255, 0.06);
+    --glass-input-bg: rgba(255, 255, 255, 0.04);
+
+    /* Muted Borders & Subtle Shadows */
+    --glass-border: rgba(255, 255, 255, 0.08);
+    --glass-border-light: rgba(255, 255, 255, 0.14);
+    --glass-border-amber: rgba(180, 140, 75, 0.3);
+    --glass-shadow: 0 12px 32px -10px rgba(0, 0, 0, 0.5);
+    --glass-glow-steel: 0 0 12px rgba(148, 163, 184, 0.15);
+
+    /* Low-Saturation Professional Text & Accent Tokens */
+    --text-white: #f1f5f9;
+    --text-muted: #94a3b8;
+    --accent-steel: #64748b;
+    --accent-slate: #475569;
+    --accent-amber: #b48c4b;
+    --accent-green: #476e5d;
+    --accent-red: #8c4a4a;
+    --focus-ring: 0 0 0 2px #64748b;
+
+    /* Scrollbar Tokens (derived from existing muted palette) */
+    --scrollbar-track: rgba(255, 255, 255, 0.02);
+    --scrollbar-thumb: rgba(148, 163, 184, 0.25);
+    --scrollbar-thumb-hover: rgba(148, 163, 184, 0.45);
+    --scrollbar-thumb-active: rgba(148, 163, 184, 0.6);
+    --scrollbar-size: 10px;
 }
 
-* { box-sizing: border-box; }
+/* --------------------------------------------------------------------------
+   1. Global Base Styles
+   -------------------------------------------------------------------------- */
+* {
+    box-sizing: border-box;
+}
 
 body {
     margin: 0;
-    font-family: Calibri, "Segoe UI", Arial, sans-serif;
-    background: var(--bg);
-    color: var(--text);
+    padding: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    background: var(--bg-gradient);
+    background-attachment: fixed;
+    color: var(--text-white);
+    min-height: 100vh;
+    line-height: 1.5;
 }
-
-/* ---------- top navigation ---------- */
-
-.topbar {
-    background: var(--navy);
-    color: #fff;
-    display: flex;
-    align-items: center;
-    padding: 0 24px;
-    height: 64px;
-}
-
-.topbar .brand {
-    font-weight: bold;
-    font-size: 1.1rem;
-    margin-right: 40px;
-    white-space: nowrap;
-}
-
-.topbar .mainnav {
-    flex: 1;
-    display: flex;
-    gap: 22px;
-}
-
-.topbar .mainnav a {
-    color: #D7DFEC;
-    text-decoration: none;
-    font-size: 0.95rem;
-    padding: 8px 4px;
-    border-bottom: 2px solid transparent;
-}
-
-.topbar .mainnav a:hover {
-    color: #fff;
-    border-bottom-color: var(--amber);
-}
-
-.userbox {
-    display: flex;
-    align-items: center;
-    gap: 14px;
-    font-size: 0.9rem;
-    color: #CADCFC;
-}
-
-.btn-logout {
-    background: var(--teal);
-    color: #fff !important;
-    padding: 6px 14px;
-    border-radius: 6px;
-    text-decoration: none;
-    font-size: 0.85rem;
-}
-
-/* ---------- layout ---------- */
 
 .content {
-    max-width: 1100px;
+    max-width: 1280px;
     margin: 0 auto;
-    padding: 32px 24px 60px;
+    padding: 2rem 1.5rem 4rem;
 }
 
-.footer {
-    text-align: center;
-    color: var(--muted);
+/* Typography */
+h1 {
+    font-size: clamp(1.6rem, 3vw, 2.2rem);
+    font-weight: 700;
+    margin: 0 0 0.5rem 0;
+    color: var(--text-white);
+    letter-spacing: -0.01em;
+}
+
+h2 {
+    font-size: clamp(1.2rem, 2.5vw, 1.5rem);
+    font-weight: 600;
+    margin: 2rem 0 1rem 0;
+    color: var(--text-white);
+    border-left: 3px solid var(--accent-steel);
+    padding-left: 10px;
+}
+
+h3,
+h4 {
+    color: var(--text-white);
+    font-weight: 600;
+}
+
+p,
+label,
+span {
+    color: var(--text-muted);
+    font-size: 0.95rem;
+}
+
+/* --------------------------------------------------------------------------
+   2. Sticky Glass Header & Navigation
+   -------------------------------------------------------------------------- */
+.topbar {
+    position: sticky;
+    top: 0;
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.85rem 1.5rem;
+    background: var(--glass-topbar-bg);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border-bottom: 1px solid var(--glass-border);
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25);
+}
+
+.brand {
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: var(--text-white);
+    letter-spacing: -0.01em;
+}
+
+.connectivity-badge {
+    background: rgba(71, 110, 93, 0.2);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    border: 1px solid rgba(71, 110, 93, 0.4);
+    color: #a3c1b2;
+    padding: 0.25rem 0.75rem;
+    border-radius: 4px;
+    font-weight: 600;
     font-size: 0.8rem;
-    padding: 20px;
 }
 
-h1 { color: var(--navy); font-size: 1.7rem; margin: 0 0 6px; }
-h2 { color: var(--navy); font-size: 1.25rem; }
-.subtitle { color: var(--muted); margin-bottom: 28px; }
-
-/* ---------- cards / dashboard ---------- */
-
-.card-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-    gap: 18px;
-    margin-bottom: 30px;
-}
-
-.stat-card {
-    background: #fff;
-    border-radius: 10px;
-    padding: 20px;
-    box-shadow: 0 2px 8px rgba(22, 34, 62, 0.08);
-    border-top: 4px solid var(--teal);
-}
-
-.stat-card.amber { border-top-color: var(--amber); }
-.stat-card .stat-value { font-size: 2rem; font-weight: bold; color: var(--navy); }
-.stat-card .stat-label { color: var(--muted); font-size: 0.9rem; }
-
-/* ---------- forms ---------- */
-
-.form-panel {
-    background: #fff;
-    border-radius: 10px;
-    padding: 28px;
-    max-width: 640px;
-    box-shadow: 0 2px 8px rgba(22, 34, 62, 0.08);
-}
-
-label { display: block; margin: 14px 0 5px; font-weight: bold; font-size: 0.92rem; }
-
-input[type=text], input[type=number], input[type=password], input[type=date],
-select, textarea {
-    width: 100%;
-    padding: 10px 12px;
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    font-size: 0.95rem;
-    font-family: inherit;
-}
-
-input:focus, select:focus, textarea:focus {
-    outline: none;
-    border-color: var(--teal);
-}
-
-.field-error { border-color: var(--error) !important; background: var(--error-bg); }
-.error-text { color: var(--error); font-size: 0.85rem; margin-top: 4px; }
-
-.btn {
-    display: inline-block;
-    background: var(--teal);
-    color: #fff;
-    border: none;
-    padding: 11px 22px;
-    border-radius: 6px;
-    font-size: 0.95rem;
+/* Universal Hamburger Menu */
+.hamburger {
+    display: flex !important;
+    width: 42px;
+    height: 42px;
+    padding: 10px;
+    background: var(--glass-card-bg);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border: 1px solid var(--glass-border);
+    border-radius: 8px;
     cursor: pointer;
-    text-decoration: none;
-    margin-top: 20px;
+    flex-direction: column;
+    justify-content: space-between;
+    z-index: 1002;
+    transition: all 0.2s ease;
 }
-.btn:hover { background: #23615c; }
-.btn.amber { background: var(--amber); }
-.btn.amber:hover { background: #c98826; }
-.btn.secondary { background: #fff; color: var(--navy); border: 1px solid var(--border); }
 
-.alert {
-    padding: 12px 16px;
-    border-radius: 6px;
-    margin-bottom: 18px;
-    font-size: 0.92rem;
+.hamburger:hover,
+.hamburger:focus-visible {
+    background: var(--glass-card-hover);
+    border-color: var(--glass-border-light);
+    outline: none;
 }
-.alert.success { background: var(--teal-light); color: #1c5551; }
-.alert.error   { background: var(--error-bg); color: var(--error); }
-.alert.warning { background: var(--amber-light); color: #8a5a10; }
 
-/* ---------- tables ---------- */
-
-table.data-table {
+.hamburger span {
+    display: block;
+    height: 2px;
     width: 100%;
-    border-collapse: collapse;
-    background: #fff;
-    border-radius: 10px;
-    overflow: hidden;
-    box-shadow: 0 2px 8px rgba(22, 34, 62, 0.08);
+    background-color: var(--text-muted);
+    border-radius: 2px;
+    transition: transform 0.25s ease, opacity 0.2s ease;
 }
-table.data-table th {
-    background: var(--navy);
-    color: #fff;
-    text-align: left;
-    padding: 12px 14px;
-    font-size: 0.85rem;
+
+.hamburger[aria-expanded="true"] span:nth-child(1) {
+    transform: translateY(7px) rotate(45deg);
 }
-table.data-table td {
-    padding: 11px 14px;
-    border-bottom: 1px solid var(--border);
-    font-size: 0.9rem;
+
+.hamburger[aria-expanded="true"] span:nth-child(2) {
+    opacity: 0;
 }
-table.data-table tr:last-child td { border-bottom: none; }
-table.data-table tr:hover td { background: #FAFBFC; }
 
-.badge {
-    display: inline-block;
-    padding: 3px 10px;
-    border-radius: 12px;
-    font-size: 0.78rem;
-    font-weight: bold;
+.hamburger[aria-expanded="true"] span:nth-child(3) {
+    transform: translateY(-7px) rotate(-45deg);
 }
-.badge.unpaid, .badge.abnormal { background: var(--error-bg); color: var(--error); }
-.badge.paid, .badge.normal { background: var(--teal-light); color: #1c5551; }
-.badge.offline { background: var(--amber-light); color: #8a5a10; }
 
-.page-actions { margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; }
+/* Glass Drawer Navigation */
+.mainnav {
+    position: fixed;
+    top: 0;
+    right: 0;
+    width: min(85vw, 360px);
+    height: 100dvh;
+    padding: 5rem 1.25rem 2rem 1.25rem;
 
-/* ---------- login page ---------- */
+    background: var(--glass-drawer-bg);
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
+    border-left: 1px solid var(--glass-border);
+    box-shadow: var(--glass-shadow);
 
-.login-wrap {
-    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+
+    transform: translateX(100%);
+    opacity: 0;
+    visibility: hidden;
+    transition: transform 0.25s ease-in-out, opacity 0.2s ease, visibility 0.25s;
+    z-index: 1001;
+}
+
+.mainnav.open {
+    transform: translateX(0);
+    opacity: 1;
+    visibility: visible;
+}
+
+.mainnav a {
+    display: flex;
+    align-items: center;
+    min-height: 46px;
+    padding: 0.75rem 1rem;
+
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--text-white) !important;
+    text-decoration: none;
+
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid var(--glass-border);
+    border-radius: 8px;
+    transition: all 0.2s ease;
+}
+
+.mainnav a:hover,
+.mainnav a:focus-visible {
+    background: rgba(255, 255, 255, 0.06);
+    border-color: var(--glass-border-light);
+    transform: translateX(-4px);
+    outline: none;
+}
+
+.userbox-mobile {
+    margin-top: auto;
+    padding: 1rem;
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid var(--glass-border);
+    border-radius: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.userbox-mobile span {
+    color: var(--text-white);
+    font-size: 0.95rem;
+    font-weight: 600;
+}
+
+.userbox-mobile .btn-logout {
     display: flex;
     align-items: center;
     justify-content: center;
-    background: linear-gradient(135deg, var(--navy) 0%, var(--navy-light) 100%);
+    min-height: 44px;
+    background: rgba(140, 74, 74, 0.3);
+    border: 1px solid rgba(140, 74, 74, 0.5);
+    color: #f1f5f9 !important;
+    font-size: 0.95rem;
+    font-weight: 600;
+    border-radius: 6px;
+    text-decoration: none;
 }
-.login-box {
-    background: #fff;
-    padding: 40px;
-    border-radius: 12px;
-    width: 380px;
-    box-shadow: 0 10px 40px rgba(0,0,0,0.25);
-}
-.login-box h1 { font-size: 1.3rem; text-align: center; }
-.login-box .subtitle { text-align: center; font-size: 0.85rem; }
 
-/* ---------- printable receipt ---------- */
-
-@media print {
-    .no-print { display: none !important; }
-    .topbar { display: none !important; }
-    .footer { display: none !important; }
-    body { background: #fff; }
+.userbox-desktop {
+    display: none !important;
 }
-.receipt-box {
-    max-width: 480px;
-    margin: 0 auto;
-    background: #fff;
-    padding: 30px;
-    border: 1px solid var(--border);
+
+/* --------------------------------------------------------------------------
+   Footer (Centered, Glass Style — Matches Topbar)
+   -------------------------------------------------------------------------- */
+footer {
+    flex-shrink: 0;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    gap: 0.35rem 0.75rem;
+    text-align: center;
+    padding: 0.85rem 1.5rem;
+    background: var(--glass-topbar-bg);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border-top: 1px solid var(--glass-border);
+    color: var(--text-muted);
+    font-size: 0.85rem;
+    line-height: 1.4;
+    box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.2);
+}
+
+footer p,
+footer span,
+footer small,
+footer div,
+footer a {
+    margin: 0;
+    color: var(--text-muted);
+    font-size: 0.85rem;
+    font-weight: 500;
+}
+
+footer a {
+    color: #cbd5e1;
+    border-bottom: none;
+}
+
+footer a:hover,
+footer a:focus-visible {
+    color: var(--text-white);
+    border-bottom: none;
+    outline: none;
+}
+
+/* --------------------------------------------------------------------------
+   3. Cards & Dashboards
+   -------------------------------------------------------------------------- */
+.card-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 1rem;
+    margin-bottom: 2rem;
+}
+
+.stat-card,
+.card {
+    background: var(--glass-card-bg);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid var(--glass-border);
     border-radius: 10px;
+    padding: 1.25rem;
+    box-shadow: var(--glass-shadow);
+    transition: all 0.2s ease;
 }
-.receipt-box h1 { font-size: 1.1rem; text-align: center; }
-.receipt-row { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px dashed var(--border); font-size: 0.9rem; }
-.receipt-total { font-weight: bold; font-size: 1.1rem; color: var(--navy); }
+
+.stat-card:hover,
+.card:hover {
+    background: var(--glass-card-hover);
+    border-color: var(--glass-border-light);
+}
+
+.stat-value {
+    font-size: clamp(1.8rem, 3vw, 2.2rem);
+    font-weight: 700;
+    color: var(--text-white);
+    line-height: 1.1;
+    margin-bottom: 0.25rem;
+}
+
+.stat-label {
+    font-size: 0.85rem;
+    font-weight: 500;
+    color: var(--text-muted);
+}
+
+/* --------------------------------------------------------------------------
+   4. Form Inputs & Layouts
+   -------------------------------------------------------------------------- */
+.filter-box,
+.card form,
+.content form,
+form {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    margin-bottom: 1.5rem;
+    background: var(--glass-card-bg);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid var(--glass-border);
+    border-radius: 10px;
+    padding: 1.25rem;
+}
+
+.form-group {
+    margin-bottom: 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+}
+
+.filter-box label,
+form label,
+.form-group label {
+    display: block;
+    width: 100%;
+    margin-bottom: 0.2rem;
+    font-weight: 600;
+    color: var(--text-white);
+    font-size: 0.9rem;
+}
+
+input[type="text"],
+input[type="number"],
+input[type="email"],
+input[type="password"],
+input[type="date"],
+select,
+textarea {
+    display: block;
+    width: 100%;
+    min-height: 42px;
+    padding: 0.65rem 0.85rem;
+    background: var(--glass-input-bg) !important;
+    border: 1px solid var(--glass-border) !important;
+    border-radius: 6px;
+    color: var(--text-white) !important;
+    font-size: 0.95rem;
+    font-weight: 500;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    transition: all 0.2s ease;
+}
+
+input[type="date"]::-webkit-calendar-picker-indicator {
+    filter: invert(0.8);
+    cursor: pointer;
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+    outline: none;
+    border-color: var(--glass-border-light) !important;
+    background: rgba(15, 23, 42, 0.8) !important;
+    box-shadow: var(--focus-ring);
+}
+
+::placeholder {
+    color: rgba(148, 163, 184, 0.5) !important;
+}
+
+/* --------------------------------------------------------------------------
+   5. Buttons & Actions
+   -------------------------------------------------------------------------- */
+.btn,
+button,
+input[type="submit"] {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.65rem 1.25rem;
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--text-white) !important;
+    text-decoration: none;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--glass-border-light);
+    border-radius: 6px;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    transition: all 0.2s ease;
+    cursor: pointer;
+}
+
+.btn:hover,
+button:hover,
+input[type="submit"]:hover {
+    background: rgba(255, 255, 255, 0.1);
+    border-color: rgba(255, 255, 255, 0.25);
+}
+
+.btn-secondary,
+.btn-cancel {
+    background: rgba(255, 255, 255, 0.02) !important;
+    border-color: var(--glass-border) !important;
+    color: var(--text-muted) !important;
+}
+
+.btn-danger,
+.btn-delete {
+    background: rgba(140, 74, 74, 0.2) !important;
+    border-color: rgba(140, 74, 74, 0.4) !important;
+}
+
+/* --------------------------------------------------------------------------
+   6. Universal Glass Data Tables
+   -------------------------------------------------------------------------- */
+.table-responsive,
+.table-wrapper {
+    background: var(--glass-card-bg);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid var(--glass-border);
+    border-radius: 10px;
+    padding: 0.25rem;
+    overflow-x: auto;
+    overflow-y: visible;
+    box-shadow: var(--glass-shadow);
+    margin-bottom: 2rem;
+}
+
+table,
+.data-table {
+    width: 100%;
+    border-collapse: collapse;
+    text-align: left;
+}
+
+th {
+    padding: 0.85rem 1rem;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    border-bottom: 1px solid var(--glass-border);
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+}
+
+td {
+    padding: 0.75rem 1rem;
+    font-size: 0.95rem;
+    color: var(--text-white);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+tbody tr:hover {
+    background: rgba(255, 255, 255, 0.03);
+}
+
+tbody tr:last-child td {
+    border-bottom: none;
+}
+
+/* --------------------------------------------------------------------------
+   7. Alert Messages & Status Badges
+   -------------------------------------------------------------------------- */
+.alert,
+.flash-message {
+    padding: 1rem 1.25rem;
+    border-radius: 8px;
+    font-weight: 500;
+    font-size: 0.95rem;
+    margin-bottom: 1.25rem;
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+}
+
+.alert-warning,
+.warning {
+    background: rgba(180, 140, 75, 0.15);
+    border: 1px solid var(--glass-border-amber);
+    color: #d1b88a;
+}
+
+.alert-success,
+.success {
+    background: rgba(71, 110, 93, 0.15);
+    border: 1px solid rgba(71, 110, 93, 0.4);
+    color: #a3c1b2;
+}
+
+.badge {
+    display: inline-block;
+    padding: 0.25rem 0.65rem;
+    border-radius: 4px;
+    font-weight: 600;
+    font-size: 0.75rem;
+    border: 1px solid transparent;
+}
+
+.badge-paid,
+.badge-resolved {
+    background: rgba(71, 110, 93, 0.2);
+    border-color: rgba(71, 110, 93, 0.4);
+    color: #a3c1b2;
+}
+
+.badge-pending,
+.badge-unpaid {
+    background: rgba(180, 140, 75, 0.2);
+    border-color: var(--glass-border-amber);
+    color: #d1b88a;
+}
+
+/* Dynamic Muted Status Badges */
+.status-badge {
+    display: inline-block;
+    padding: 0.2rem 0.5rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    border-radius: 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    line-height: 1.2;
+}
+
+.badge-synced {
+    background-color: rgba(226, 232, 240, 0.08);
+    color: #cbd5e1;
+    border: 1px solid rgba(203, 213, 225, 0.2);
+}
+
+.badge-pending {
+    background-color: rgba(241, 245, 249, 0.05);
+    color: #94a3b8;
+    border: 1px solid rgba(226, 232, 240, 0.15);
+}
+
+.badge-offline {
+    background-color: rgba(248, 250, 252, 0.03);
+    color: #64748b;
+    border: 1px dashed rgba(203, 213, 225, 0.2);
+}
+
+/* --------------------------------------------------------------------------
+   8. Login Page (Centered & Redesigned)
+   -------------------------------------------------------------------------- */
+.login-body {
+    display: flex !important;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    padding: 2rem 1.5rem;
+    background: var(--bg-gradient);
+    background-attachment: fixed;
+    position: relative;
+    overflow: auto;
+    margin: 0;
+}
+
+.login-body::before {
+    content: "";
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    width: min(80vw, 720px);
+    height: min(80vw, 720px);
+    transform: translate(-50%, -50%);
+    background: radial-gradient(circle, rgba(100, 116, 139, 0.12) 0%, transparent 65%);
+    pointer-events: none;
+    z-index: 0;
+}
+
+.login-card {
+    position: relative;
+    z-index: 1;
+    width: 100%;
+    max-width: 420px;
+    margin: 0 auto;
+    background: rgba(15, 23, 42, 0.88);
+    backdrop-filter: blur(22px);
+    -webkit-backdrop-filter: blur(22px);
+    border: 1px solid var(--glass-border);
+    border-radius: 16px;
+    padding: 2.5rem 2rem 2rem;
+    box-shadow: var(--glass-shadow), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+    text-align: center;
+    overflow: hidden;
+}
+
+.login-card::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: linear-gradient(90deg,
+        transparent 0%,
+        var(--accent-steel) 25%,
+        var(--accent-amber) 50%,
+        var(--accent-steel) 75%,
+        transparent 100%);
+    opacity: 0.85;
+}
+
+.login-card::after {
+    content: "";
+    position: absolute;
+    top: -70px;
+    right: -70px;
+    width: 200px;
+    height: 200px;
+    background: radial-gradient(circle, rgba(180, 140, 75, 0.12) 0%, transparent 70%);
+    pointer-events: none;
+}
+
+.login-card .brand-title {
+    position: relative;
+    display: block;
+    font-size: 1.4rem;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    margin-bottom: 0.35rem;
+    color: var(--text-white);
+}
+
+.login-card .brand-sub {
+    position: relative;
+    display: block;
+    color: var(--text-muted);
+    font-size: 0.8rem;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    margin-bottom: 2rem;
+    padding-bottom: 1.5rem;
+    border-bottom: 1px solid var(--glass-border);
+}
+
+.login-card form {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    margin: 0;
+    padding: 0;
+    background: transparent;
+    border: none;
+    box-shadow: none;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    border-radius: 0;
+    width: 100%;
+}
+
+.login-card .form-group {
+    text-align: left;
+    margin-bottom: 0;
+    gap: 0.4rem;
+}
+
+.login-card label {
+    display: block;
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    margin-bottom: 0.15rem;
+    transition: color 0.2s ease;
+}
+
+.login-card .form-group:focus-within label {
+    color: var(--text-white);
+}
+
+.login-card input[type="text"],
+.login-card input[type="email"],
+.login-card input[type="password"] {
+    width: 100%;
+    min-height: 46px;
+    padding: 0.75rem 1rem;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid var(--glass-border);
+    border-radius: 8px;
+    color: var(--text-white) !important;
+    font-size: 0.95rem;
+    font-weight: 500;
+    transition: all 0.2s ease;
+}
+
+.login-card input[type="text"]:hover,
+.login-card input[type="email"]:hover,
+.login-card input[type="password"]:hover {
+    border-color: var(--glass-border-light);
+    background: rgba(255, 255, 255, 0.06);
+}
+
+.login-card input[type="text"]:focus,
+.login-card input[type="email"]:focus,
+.login-card input[type="password"]:focus {
+    outline: none;
+    border-color: var(--accent-steel);
+    background: rgba(15, 23, 42, 0.9);
+    box-shadow: var(--focus-ring);
+}
+
+.login-card input::placeholder {
+    color: rgba(148, 163, 184, 0.4) !important;
+}
+
+.login-card .btn-login,
+.login-card button[type="submit"] {
+    position: relative;
+    width: 100%;
+    min-height: 48px;
+    margin-top: 0.85rem;
+    font-size: 0.9rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    background: linear-gradient(135deg,
+        rgba(100, 116, 139, 0.35) 0%,
+        rgba(71, 85, 105, 0.55) 100%);
+    border: 1px solid var(--glass-border-light);
+    border-radius: 8px;
+    color: #ffffff !important;
+    cursor: pointer;
+    overflow: hidden;
+    transition: all 0.25s ease;
+}
+
+.login-card .btn-login:hover,
+.login-card .btn-login:focus-visible,
+.login-card button[type="submit"]:hover,
+.login-card button[type="submit"]:focus-visible {
+    background: linear-gradient(135deg,
+        rgba(100, 116, 139, 0.55) 0%,
+        rgba(71, 85, 105, 0.75) 100%);
+    border-color: rgba(255, 255, 255, 0.3);
+    transform: translateY(-1px);
+    box-shadow: 0 8px 20px -6px rgba(0, 0, 0, 0.5);
+    outline: none;
+}
+
+.login-card .btn-login:active,
+.login-card button[type="submit"]:active {
+    transform: translateY(0);
+    box-shadow: none;
+}
+
+.login-card .login-footer {
+    position: relative;
+    margin-top: 1.75rem;
+    padding-top: 1.25rem;
+    border-top: 1px solid var(--glass-border);
+    font-size: 0.85rem;
+    color: var(--text-muted);
+}
+
+.login-card .login-footer a {
+    color: #cbd5e1;
+    border-bottom: none;
+    font-weight: 600;
+}
+
+.login-card .login-footer a:hover,
+.login-card .login-footer a:focus-visible {
+    color: var(--text-white);
+    border-bottom: none;
+    outline: none;
+}
+
+.login-card .errorlist,
+.login-card .alert-error {
+    list-style: none;
+    margin: 0 0 1rem;
+    padding: 0.75rem 1rem;
+    background: rgba(140, 74, 74, 0.15);
+    border: 1px solid rgba(140, 74, 74, 0.4);
+    border-radius: 8px;
+    color: #e8b8b8;
+    font-size: 0.85rem;
+    text-align: left;
+}
+
+/* --------------------------------------------------------------------------
+   9. Links & Auxiliary Elements
+   -------------------------------------------------------------------------- */
+a {
+    color: #cbd5e1;
+    text-decoration: none;
+    font-weight: 500;
+    transition: all 0.2s ease;
+    border-bottom: 1px dotted rgba(203, 213, 225, 0.3);
+}
+
+a:visited {
+    color: #cbd5e1;
+}
+
+a:hover,
+a:focus-visible {
+    color: #f1f5f9;
+    border-bottom-color: #f1f5f9;
+    outline: none;
+}
+
+.related-lists,
+p:has(> a) {
+    color: var(--text-muted);
+    font-size: 0.95rem;
+    margin: 1rem 0 1.5rem;
+}
+
+.related-lists a,
+.quick-links a {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.3rem 0.65rem;
+    margin: 0 0.15rem;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid var(--glass-border);
+    border-radius: 6px;
+    color: #cbd5e1;
+    font-weight: 500;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    border-bottom: none;
+}
+
+.related-lists a:hover,
+.quick-links a:hover {
+    background: rgba(255, 255, 255, 0.08);
+    border-color: var(--glass-border-light);
+    color: #ffffff;
+}
+
+/* ==========================================================================
+   10. App Shell (Django-style fixed chrome + scrolling body)
+   ========================================================================== */
+
+/* 1. Lock the root container to the exact viewport size */
+html,
+body {
+    margin: 0;
+    padding: 0;
+    height: 100%;
+    width: 100%;
+    overflow: hidden;   /* prevents the whole page from scrolling */
+}
+
+/* 2. Main Application Wrapper */
+.app-viewport {
+    display: flex;
+    flex-direction: column;
+    height: 100dvh;     /* dynamic viewport height */
+    width: 100vw;
+    box-sizing: border-box;
+}
+
+/* 3. Header & Footer shrink-wrap to their content */
+.topbar,
+footer {
+    flex-shrink: 0;
+}
+
+/* 4. Content box grows and scrolls internally.
+      `overflow: auto` is what lets long dashboards scroll instead of
+      being clipped - the bug you were running into. */
+.content-wrapper {
+    flex: 1;
+    display: block;
+    padding: 1rem 1.5rem 2rem;
+    min-height: 0;              /* critical for flex children to shrink */
+    overflow-y: auto;           /* vertical scroll for the whole content area */
+    overflow-x: hidden;
+    scrollbar-gutter: stable;   /* no layout shift when scrollbar appears */
+    -webkit-overflow-scrolling: touch;
+}
+
+/* 5. Wide tables get horizontal scroll; vertical scroll is handled
+      by the parent .content-wrapper above. */
+.table-responsive,
+.table-wrapper {
+    overflow-x: auto;
+    overflow-y: visible;
+    border-radius: 8px;
+}
+
+/* ==========================================================================
+   11. Recent Activity Panel (bounded, internally scrollable)
+   ========================================================================== */
+
+.activity-card {
+    background: var(--glass-card-bg);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid var(--glass-border);
+    border-radius: 10px;
+    box-shadow: var(--glass-shadow);
+    padding: 0.25rem;
+    margin-bottom: 2rem;
+    overflow: hidden;
+    transition: border-color 0.2s ease, background 0.2s ease;
+}
+
+.activity-card:hover {
+    border-color: var(--glass-border-light);
+    background: var(--glass-card-hover);
+}
+
+.activity-scroll {
+    max-height: 360px;
+    overflow-y: auto;
+    overflow-x: hidden;
+    border-radius: 8px;
+    scrollbar-gutter: stable;
+}
+
+.activity-table {
+    width: 100%;
+    border-collapse: collapse;
+    table-layout: fixed;
+}
+
+.activity-table th,
+.activity-table td {
+    padding: 0.7rem 1rem;
+    vertical-align: top;
+    word-wrap: break-word;
+    overflow-wrap: anywhere;
+}
+
+.activity-table .col-when {
+    width: 150px;
+    white-space: nowrap;
+    color: var(--text-muted);
+    font-size: 0.85rem;
+}
+
+.activity-table .col-user {
+    width: 180px;
+    white-space: nowrap;
+    color: var(--text-white);
+    font-weight: 600;
+}
+
+.activity-table .empty-row {
+    text-align: center;
+    padding: 2rem 1rem;
+    color: var(--text-muted);
+    font-style: italic;
+}
+
+.activity-table thead th {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    background: rgba(15, 23, 42, 0.96);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+}
+
+/* ==========================================================================
+   12. Django-Style Custom Scrollbars (Theme-Matched, Always Visible)
+   ========================================================================== */
+
+/* --- Firefox (standards-based) --- */
+* {
+    scrollbar-width: thin;
+    scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+}
+
+/* --- WebKit / Blink (Chrome, Edge, Safari, Opera) --- */
+*::-webkit-scrollbar {
+    width: var(--scrollbar-size);
+    height: var(--scrollbar-size);
+    background-color: transparent;
+}
+
+*::-webkit-scrollbar-track {
+    background: var(--scrollbar-track);
+    border-radius: 8px;
+}
+
+*::-webkit-scrollbar-thumb {
+    background-color: var(--scrollbar-thumb);
+    border-radius: 8px;
+    border: 2px solid transparent;
+    background-clip: padding-box;
+    transition: background-color 0.2s ease;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+    background-color: var(--scrollbar-thumb-hover);
+    background-clip: padding-box;
+}
+
+*::-webkit-scrollbar-thumb:active {
+    background-color: var(--scrollbar-thumb-active);
+    background-clip: padding-box;
+}
+
+*::-webkit-scrollbar-corner {
+    background: transparent;
+}
+
+*::-webkit-scrollbar-button {
+    display: none;
+    height: 0;
+    width: 0;
+}
+
+/* --- Force-visible scrollbars on the containers that actually scroll ---
+   Overlay scrollbars on Windows/Chrome hide themselves until hover, which
+   is confusing on a fixed-chrome layout. These rules keep them on. */
+.content-wrapper,
+.table-responsive,
+.table-wrapper,
+.activity-scroll,
+.mainnav {
+    scrollbar-width: thin;
+    scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+}
+
+.content-wrapper::-webkit-scrollbar,
+.table-responsive::-webkit-scrollbar,
+.table-wrapper::-webkit-scrollbar,
+.activity-scroll::-webkit-scrollbar,
+.mainnav::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+    background: var(--scrollbar-track);
+}
+
+.content-wrapper::-webkit-scrollbar-track,
+.table-responsive::-webkit-scrollbar-track,
+.table-wrapper::-webkit-scrollbar-track,
+.activity-scroll::-webkit-scrollbar-track,
+.mainnav::-webkit-scrollbar-track {
+    background: var(--scrollbar-track);
+    border-radius: 8px;
+}
+
+.content-wrapper::-webkit-scrollbar-thumb,
+.table-responsive::-webkit-scrollbar-thumb,
+.table-wrapper::-webkit-scrollbar-thumb,
+.activity-scroll::-webkit-scrollbar-thumb,
+.mainnav::-webkit-scrollbar-thumb {
+    background-color: var(--scrollbar-thumb);
+    border-radius: 8px;
+    border: 2px solid transparent;
+    background-clip: padding-box;
+}
+
+.content-wrapper::-webkit-scrollbar-thumb:hover,
+.table-responsive::-webkit-scrollbar-thumb:hover,
+.table-wrapper::-webkit-scrollbar-thumb:hover,
+.activity-scroll::-webkit-scrollbar-thumb:hover,
+.mainnav::-webkit-scrollbar-thumb:hover {
+    background-color: var(--scrollbar-thumb-hover);
+    background-clip: padding-box;
+}
+
+.content-wrapper::-webkit-scrollbar-thumb:active,
+.table-responsive::-webkit-scrollbar-thumb:active,
+.table-wrapper::-webkit-scrollbar-thumb:active,
+.activity-scroll::-webkit-scrollbar-thumb:active,
+.mainnav::-webkit-scrollbar-thumb:active {
+    background-color: var(--scrollbar-thumb-active);
+    background-clip: padding-box;
+}
+
+/* Slightly brighter track on the activity panel so users notice it scrolls */
+.activity-scroll::-webkit-scrollbar-track {
+    background: rgba(255, 255, 255, 0.03);
+}
+
+/* Reserve space so scrollbars don't cause layout shift */
+@supports (scrollbar-gutter: stable) {
+    .table-responsive,
+    .table-wrapper,
+    .mainnav,
+    .content-wrapper,
+    .activity-scroll {
+        scrollbar-gutter: stable;
+    }
+}
+
+/* Accessibility: respect forced-colors mode */
+@media (forced-colors: active) {
+    *::-webkit-scrollbar-thumb {
+        background-color: ButtonText;
+    }
+    *::-webkit-scrollbar-track {
+        background-color: Canvas;
+    }
+}
+
+/* ==========================================================================
+   13. Report Filter Bar – High Contrast Fix
+   ==========================================================================
+   Report filter controls (Ward / House / From / To / Filter / Print) were
+   using the muted glass-card background with backdrop-filter, which made
+   labels and inputs invisible when the surrounding page or browser state
+   didn't provide the dark gradient behind them.
+
+   This section gives the filter panel a solid dark surface and strong
+   contrast on every child element, so the controls are readable on every
+   report page in the system.
+   -------------------------------------------------------------------------- */
+
+/* --- Panel container ------------------------------------------------ */
+.filter-box,
+.filter-bar,
+.report-filters,
+.filters,
+form.filter-form,
+form.filters-form {
+    background: rgba(15, 23, 42, 0.96) !important;
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    border: 1px solid var(--glass-border-light) !important;
+    border-radius: 10px;
+    padding: 1.25rem 1.25rem 1.1rem;
+    box-shadow: var(--glass-shadow);
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: 1rem 1.25rem;
+    margin-bottom: 1.5rem;
+}
+
+/* --- Field wrappers (label + control stacked) ----------------------- */
+.filter-box > div,
+.filter-bar > div,
+.report-filters > div,
+.filters > div {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    min-width: 140px;
+}
+
+/* --- Labels --------------------------------------------------------- */
+.filter-box label,
+.filter-bar label,
+.report-filters label,
+.filters label,
+form.filter-form label,
+form.filters-form label {
+    display: block;
+    color: #ffffff !important;
+    font-size: 0.78rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    margin: 0 0 0.35rem 0;
+    opacity: 1 !important;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+}
+
+/* --- Inputs, selects, text fields ----------------------------------- */
+.filter-box input,
+.filter-box select,
+.filter-bar input,
+.filter-bar select,
+.report-filters input,
+.report-filters select,
+.filters input,
+.filters select,
+form.filter-form input,
+form.filter-form select,
+form.filters-form input,
+form.filters-form select {
+    background: rgba(30, 41, 59, 0.95) !important;
+    border: 1px solid rgba(255, 255, 255, 0.22) !important;
+    color: #f1f5f9 !important;
+    min-height: 42px;
+    padding: 0.55rem 0.8rem;
+    border-radius: 6px;
+    font-weight: 500;
+    font-size: 0.9rem;
+    opacity: 1 !important;
+    transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.filter-box input:hover,
+.filter-box select:hover,
+.filter-bar input:hover,
+.filter-bar select:hover,
+.report-filters input:hover,
+.report-filters select:hover,
+.filters input:hover,
+.filters select:hover {
+    border-color: rgba(255, 255, 255, 0.35) !important;
+    background: rgba(30, 41, 59, 1) !important;
+}
+
+.filter-box input:focus,
+.filter-box select:focus,
+.filter-bar input:focus,
+.filter-bar select:focus,
+.report-filters input:focus,
+.report-filters select:focus,
+.filters input:focus,
+.filters select:focus {
+    outline: none;
+    border-color: var(--accent-steel) !important;
+    box-shadow: var(--focus-ring);
+}
+
+/* --- Select dropdown items (native popup) --------------------------- */
+.filter-box select option,
+.filter-bar select option,
+.report-filters select option,
+.filters select option {
+    background: #1e293b;
+    color: #f1f5f9;
+    padding: 0.4rem;
+}
+
+/* --- Date inputs: force the "dd/mm/yyyy" text to be light ----------- */
+.filter-box input[type="date"],
+.filter-bar input[type="date"],
+.report-filters input[type="date"],
+.filters input[type="date"] {
+    color-scheme: dark;    /* tells the browser to render pickers dark */
+}
+
+.filter-box input[type="date"]::-webkit-datetime-edit,
+.filter-bar input[type="date"]::-webkit-datetime-edit,
+.report-filters input[type="date"]::-webkit-datetime-edit,
+.filters input[type="date"]::-webkit-datetime-edit {
+    color: #f1f5f9;
+}
+
+.filter-box input[type="date"]::-webkit-datetime-edit-fields-wrapper,
+.filter-bar input[type="date"]::-webkit-datetime-edit-fields-wrapper,
+.report-filters input[type="date"]::-webkit-datetime-edit-fields-wrapper,
+.filters input[type="date"]::-webkit-datetime-edit-fields-wrapper {
+    color: #f1f5f9;
+}
+
+/* Empty date field text (the dd/mm/yyyy hint) */
+.filter-box input[type="date"]:invalid::-webkit-datetime-edit,
+.filter-bar input[type="date"]:invalid::-webkit-datetime-edit,
+.report-filters input[type="date"]:invalid::-webkit-datetime-edit,
+.filters input[type="date"]:invalid::-webkit-datetime-edit {
+    color: rgba(241, 245, 249, 0.65);
+}
+
+/* Calendar picker icon – invert so it's light on dark */
+.filter-box input[type="date"]::-webkit-calendar-picker-indicator,
+.filter-bar input[type="date"]::-webkit-calendar-picker-indicator,
+.report-filters input[type="date"]::-webkit-calendar-picker-indicator,
+.filters input[type="date"]::-webkit-calendar-picker-indicator {
+    filter: invert(0.9);
+    opacity: 0.85;
+    cursor: pointer;
+}
+
+/* Firefox date input */
+.filter-box input[type="date"],
+.filter-bar input[type="date"],
+.report-filters input[type="date"] {
+    color-scheme: dark;
+}
+
+/* --- Placeholders on text inputs ------------------------------------ */
+.filter-box input::placeholder,
+.filter-bar input::placeholder,
+.report-filters input::placeholder,
+.filters input::placeholder {
+    color: rgba(241, 245, 249, 0.55) !important;
+    opacity: 1 !important;
+}
+
+/* --- Buttons (Filter / Print / Apply) ------------------------------- */
+.filter-box .btn,
+.filter-box button,
+.filter-box input[type="submit"],
+.filter-bar .btn,
+.filter-bar button,
+.report-filters .btn,
+.report-filters button,
+.filters .btn,
+.filters button,
+form.filter-form .btn,
+form.filter-form button {
+    min-height: 42px;
+    padding: 0.55rem 1.35rem;
+    font-weight: 700;
+    font-size: 0.82rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    background: rgba(100, 116, 139, 0.45) !important;
+    border: 1px solid rgba(255, 255, 255, 0.28) !important;
+    color: #ffffff !important;
+    border-radius: 6px;
+    opacity: 1 !important;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    white-space: nowrap;
+}
+
+.filter-box .btn:hover,
+.filter-box button:hover,
+.filter-box input[type="submit"]:hover,
+.filter-bar .btn:hover,
+.filter-bar button:hover,
+.report-filters .btn:hover,
+.report-filters button:hover,
+.filters .btn:hover,
+.filters button:hover {
+    background: rgba(100, 116, 139, 0.75) !important;
+    border-color: rgba(255, 255, 255, 0.5) !important;
+    transform: translateY(-1px);
+}
+
+/* Print button – amber accent so it reads as a secondary action */
+.filter-box .btn-print,
+.filter-bar .btn-print,
+.report-filters .btn-print,
+.filters .btn-print,
+form.filter-form .btn-print,
+.filter-box button[name="print"],
+.filter-bar button[name="print"],
+.report-filters button[name="print"],
+.filter-box a.btn-print,
+.filter-bar a.btn-print,
+.report-filters a.btn-print {
+    background: rgba(180, 140, 75, 0.4) !important;
+    border-color: rgba(180, 140, 75, 0.65) !important;
+}
+
+.filter-box .btn-print:hover,
+.filter-bar .btn-print:hover,
+.report-filters .btn-print:hover,
+.filters .btn-print:hover,
+form.filter-form .btn-print:hover,
+.filter-box button[name="print"]:hover,
+.filter-bar button[name="print"]:hover,
+.report-filters button[name="print"]:hover,
+.filter-box a.btn-print:hover,
+.filter-bar a.btn-print:hover,
+.report-filters a.btn-print:hover {
+    background: rgba(180, 140, 75, 0.6) !important;
+    border-color: rgba(180, 140, 75, 0.9) !important;
+}
+
+/* --------------------------------------------------------------------------
+   Safety net: if your report pages wrap the filters in a plain <form>
+   without any of the above classes, this rule still ensures the panel
+   background is solid enough to keep the controls readable.
+   -------------------------------------------------------------------------- */
+.report-page form,
+.reports-page form,
+body[data-page*="report"] form {
+    background: rgba(15, 23, 42, 0.96) !important;
+    border: 1px solid var(--glass-border-light) !important;
+    border-radius: 10px;
+    padding: 1.1rem 1.25rem;
+}
+
+/* --------------------------------------------------------------------------
+   Print view – keep the filter bar readable when the user actually prints
+   -------------------------------------------------------------------------- */
+@media print {
+    .filter-box,
+    .filter-bar,
+    .report-filters,
+    .filters,
+    form.filter-form {
+        background: #ffffff !important;
+        border: 1px solid #cccccc !important;
+        box-shadow: none !important;
+        backdrop-filter: none !important;
+        -webkit-backdrop-filter: none !important;
+    }
+
+    .filter-box label,
+    .filter-bar label,
+    .report-filters label,
+    .filters label {
+        color: #000000 !important;
+        text-shadow: none !important;
+    }
+
+    .filter-box input,
+    .filter-box select,
+    .filter-bar input,
+    .filter-bar select,
+    .report-filters input,
+    .report-filters select,
+    .filters input,
+    .filters select {
+        background: #ffffff !important;
+        color: #000000 !important;
+        border: 1px solid #999999 !important;
+    }
+}
+
+/* ==========================================================================
+   14. NUCLEAR FIX – Report filters on every page, every wrapper class
+   ==========================================================================
+   Applies to any form inside .content-wrapper. Uses universal selectors so
+   it works regardless of the class name your report pages use.
+   Remove this block once the individual report pages have proper classes.
+   -------------------------------------------------------------------------- */
+
+/* 1. Kill the blurry backdrop-filter everywhere it can appear */
+.content-wrapper form,
+.content-wrapper form *,
+.content-wrapper .filter-box,
+.content-wrapper .filter-box *,
+.content-wrapper .filter-bar,
+.content-wrapper .filter-bar *,
+.content-wrapper .report-filters,
+.content-wrapper .report-filters * {
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+}
+
+/* 2. Force a solid dark panel for any form in the content area */
+.content-wrapper form {
+    background: #0f172a !important;
+    border: 1px solid rgba(255, 255, 255, 0.18) !important;
+    border-radius: 10px !important;
+    padding: 1.25rem !important;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5) !important;
+    opacity: 1 !important;
+    filter: none !important;
+}
+
+/* 3. Labels — pure white, fully opaque, no shadow, no filter */
+.content-wrapper form label,
+.content-wrapper form legend,
+.content-wrapper .filter-box label,
+.content-wrapper .filter-bar label {
+    color: #ffffff !important;
+    opacity: 1 !important;
+    filter: none !important;
+    text-shadow: none !important;
+    font-weight: 700 !important;
+    font-size: 0.82rem !important;
+    letter-spacing: 0.04em !important;
+    text-transform: uppercase !important;
+    visibility: visible !important;
+}
+
+/* 4. Inputs and selects — dark field, white text, visible border */
+.content-wrapper form input:not([type="submit"]):not([type="button"]),
+.content-wrapper form select,
+.content-wrapper form textarea,
+.content-wrapper .filter-box input,
+.content-wrapper .filter-box select,
+.content-wrapper .filter-bar input,
+.content-wrapper .filter-bar select {
+    background: #1e293b !important;
+    color: #ffffff !important;
+    border: 1px solid rgba(255, 255, 255, 0.28) !important;
+    opacity: 1 !important;
+    filter: none !important;
+    -webkit-text-fill-color: #ffffff !important;
+    caret-color: #ffffff !important;
+    color-scheme: dark !important;
+}
+
+.content-wrapper form input:focus,
+.content-wrapper form select:focus {
+    border-color: #64748b !important;
+    box-shadow: 0 0 0 2px #64748b !important;
+    outline: none !important;
+}
+
+/* 5. Native select option list */
+.content-wrapper form select option {
+    background: #1e293b !important;
+    color: #ffffff !important;
+}
+
+/* 6. Date input text (`dd/mm/yyyy`) */
+.content-wrapper form input[type="date"]::-webkit-datetime-edit,
+.content-wrapper form input[type="date"]::-webkit-datetime-edit-text,
+.content-wrapper form input[type="date"]::-webkit-datetime-edit-month-field,
+.content-wrapper form input[type="date"]::-webkit-datetime-edit-day-field,
+.content-wrapper form input[type="date"]::-webkit-datetime-edit-year-field {
+    color: #ffffff !important;
+    -webkit-text-fill-color: #ffffff !important;
+}
+
+.content-wrapper form input[type="date"]::-webkit-calendar-picker-indicator {
+    filter: invert(1) !important;
+    opacity: 0.9 !important;
+}
+
+/* 7. Buttons — solid, high-contrast, uppercase */
+.content-wrapper form button,
+.content-wrapper form input[type="submit"],
+.content-wrapper form input[type="button"],
+.content-wrapper form .btn {
+    background: #475569 !important;
+    color: #ffffff !important;
+    border: 1px solid rgba(255, 255, 255, 0.3) !important;
+    font-weight: 700 !important;
+    letter-spacing: 0.05em !important;
+    text-transform: uppercase !important;
+    opacity: 1 !important;
+    filter: none !important;
+    padding: 0.55rem 1.25rem !important;
+    min-height: 42px !important;
+}
+
+.content-wrapper form button:hover,
+.content-wrapper form input[type="submit"]:hover,
+.content-wrapper form .btn:hover {
+    background: #64748b !important;
+    border-color: rgba(255, 255, 255, 0.5) !important;
+}
+/* ==========================================================================
+   17. GLOBAL PRINT — bulletproof, class-agnostic
+   ==========================================================================
+   Technique: hide the entire body with `visibility: hidden`, then re-show
+   only the printable region with `visibility: visible`. This works no
+   matter what classes your chrome elements use, because we're hiding
+   everything by default and selectively revealing.
+   ========================================================================== */
+@media print {
+
+    /* ---------- 1. Page setup ---------- */
+    @page {
+        margin: 12mm 10mm;
+        size: A4 portrait;
+    }
+
+    /* ---------- 2. Hide everything ---------- */
+    html, body {
+        background: #ffffff !important;
+        background-image: none !important;
+        color: #000000 !important;
+        overflow: visible !important;
+        height: auto !important;
+        width: auto !important;
+        margin: 0 !important;
+        padding: 0 !important;
+    }
+
+    body * {
+        visibility: hidden !important;
+        box-shadow: none !important;
+        text-shadow: none !important;
+    }
+
+    /* ---------- 3. Reveal the printable region ----------
+       Add the class `print-area` to the element you want printed, OR
+       rely on these auto-detected containers:
+         - .content-wrapper   (whole page content on lists / reports / forms)
+         - .receipt-box       (fine receipt)
+         - .print-area        (explicit opt-in)
+    ------------------------------------------------ */
+    .content-wrapper,
+    .content-wrapper *,
+    .receipt-box,
+    .receipt-box *,
+    .print-area,
+    .print-area * {
+        visibility: visible !important;
+    }
+
+    /* ---------- 4. Strip the app-shell layout so content flows ---------- */
+    html, body,
+    .app-viewport,
+    .content-wrapper,
+    .table-responsive,
+    .table-wrapper {
+        display: block !important;
+        position: static !important;
+        height: auto !important;
+        max-height: none !important;
+        min-height: 0 !important;
+        overflow: visible !important;
+        padding: 0 !important;
+        margin: 0 !important;
+    }
+
+    /* ---------- 5. Content styling: black on white ---------- */
+    body, p, span, label, small, div, td, th, h1, h2, h3, h4, h5 {
+        color: #000000 !important;
+        -webkit-text-fill-color: #000000 !important;
+    }
+
+    h1, h2, h3, h4, h5 {
+        border-left: none !important;
+        padding-left: 0 !important;
+        margin: 10px 0 6px !important;
+        page-break-after: avoid;
+    }
+
+    a, a:visited {
+        color: #000000 !important;
+        -webkit-text-fill-color: #000000 !important;
+        text-decoration: none !important;
+        border-bottom: none !important;
+    }
+
+    /* ---------- 6. Hide interactive chrome explicitly ---------- */
+    .topbar,
+    .mainnav,
+    .hamburger,
+    footer,
+    .no-print,
+    .filter-bar,
+    .filter-row,
+    .page-actions,
+    .pagination,
+    .connectivity-badge,
+    #toastContainer,
+    .glass-toast,
+    .notif-bell,
+    .notif-dropdown,
+    button,
+    .btn,
+    input[type="submit"],
+    input[type="button"],
+    select {
+        display: none !important;
+    }
+
+    /* ---------- 7. Tables: readable, paginated ---------- */
+    table, .data-table {
+        width: 100% !important;
+        border-collapse: collapse !important;
+        font-size: 10.5pt !important;
+    }
+
+    th {
+        background: #f0f0f0 !important;
+        color: #000000 !important;
+        border: 1px solid #777777 !important;
+        padding: 6px 8px !important;
+        text-transform: none !important;
+        letter-spacing: 0 !important;
+    }
+
+    td {
+        background: #ffffff !important;
+        color: #000000 !important;
+        border: 1px solid #cccccc !important;
+        padding: 6px 8px !important;
+    }
+
+    thead {
+        display: table-header-group;   /* repeat column headers on every page */
+    }
+
+    tr, .stat-card, .card, .receipt-box {
+        page-break-inside: avoid;
+    }
+
+    /* ---------- 8. Cards: plain bordered boxes ---------- */
+    .card-grid { display: block !important; }
+
+    .stat-card, .card, .activity-card {
+        background: #ffffff !important;
+        border: 1px solid #cccccc !important;
+        color: #000000 !important;
+        box-shadow: none !important;
+        backdrop-filter: none !important;
+        -webkit-backdrop-filter: none !important;
+        margin: 0 0 8px 0 !important;
+        padding: 8px 10px !important;
+    }
+
+    .stat-value { color: #000000 !important; font-size: 14pt !important; }
+    .stat-label { color: #333333 !important; }
+
+    /* ---------- 9. Alerts: bordered, readable ---------- */
+    .alert, .flash-message {
+        background: #ffffff !important;
+        border: 1px solid #999999 !important;
+        color: #000000 !important;
+        box-shadow: none !important;
+        backdrop-filter: none !important;
+        -webkit-backdrop-filter: none !important;
+    }
+
+    /* ---------- 10. Receipt-specific look ---------- */
+    .receipt-box {
+        background: #ffffff !important;
+        color: #000000 !important;
+        border: 1px solid #333333 !important;
+        box-shadow: none !important;
+        padding: 18px 20px !important;
+        max-width: 100% !important;
+        margin: 0 auto !important;
+    }
+
+    .receipt-box h1 {
+        border-bottom: 2px solid #000000 !important;
+        padding-bottom: 8px !important;
+        text-align: center !important;
+    }
+
+    .receipt-row {
+        border-bottom: 1px dashed #999999 !important;
+        color: #000000 !important;
+    }
+
+    .receipt-row span { color: #000000 !important; }
+
+    .receipt-total {
+        border-top: 2px solid #000000 !important;
+        border-bottom: none !important;
+        font-weight: 700 !important;
+    }
+
+    /* ---------- 11. Preserve colours on browsers that support it ---------- */
+    * {
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+    }
+}
+
+/* ==========================================================================
+   18. Password show / hide toggle
+   ========================================================================== */
+.password-wrap {
+    position: relative !important;
+    display: block !important;
+    width: 100% !important;
+}
+
+.password-wrap input[type="password"],
+.password-wrap input[type="text"] {
+    padding-right: 48px !important;
+    width: 100% !important;
+}
+
+/* Kill the global button styling on the toggle only */
+.password-toggle,
+.login-card .password-toggle,
+button.password-toggle {
+    position: absolute !important;
+    top: 50% !important;
+    right: 10px !important;
+    transform: translateY(-50%) !important;
+
+    width: 34px !important;
+    height: 34px !important;
+    min-height: 0 !important;
+    padding: 0 !important;
+    margin: 0 !important;
+
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+
+    background: transparent !important;
+    border: none !important;
+    border-radius: 6px !important;
+    box-shadow: none !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+
+    color: var(--text-muted) !important;
+    font-size: 1rem !important;
+    line-height: 1 !important;
+    cursor: pointer !important;
+
+    appearance: none !important;
+    -webkit-appearance: none !important;
+
+    transition: background 0.15s ease, color 0.15s ease;
+}
+
+.password-toggle:hover,
+.password-toggle:focus-visible {
+    background: rgba(255, 255, 255, 0.10) !important;
+    color: var(--text-white) !important;
+    outline: none !important;
+}
+
+.password-toggle:focus-visible {
+    box-shadow: 0 0 0 2px var(--accent-steel) !important;
+}
+
+.password-toggle .eye-icon {
+    display: inline-block !important;
+    pointer-events: none !important;
+    user-select: none !important;
+    -webkit-user-select: none !important;
+}
+
+.password-toggle .eye-icon[hidden] {
+    display: none !important;
+}
+
+/* ==========================================================================
+   20. FILTER BARS — FULL-WIDTH HORIZONTAL LAYOUT (system-wide)
+   ==========================================================================
+   Section 4's global `form { flex-direction: column }` was bleeding into
+   every filter bar, stacking the fields vertically and squeezing them
+   into a narrow column. This block wins that cascade and forces every
+   filter form on every page to lay out as a full-width row that wraps.
+   -------------------------------------------------------------------------- */
+
+/* 1. The wrapper fills its parent. */
+html body .filter-bar,
+html body .report-filters,
+html body .filter-box,
+html body .filters {
+    display: block !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    box-sizing: border-box !important;
+}
+
+/* 2. The form inside is a horizontal, wrapping flex row. */
+html body .filter-bar form,
+html body .filter-bar form.filter-row,
+html body .filter-bar .filter-row,
+html body .report-filters form,
+html body .filter-box form {
+    display: flex !important;
+    flex-direction: row !important;   /* <-- the missing property */
+    flex-wrap: wrap !important;
+    align-items: flex-end !important;
+    justify-content: flex-start !important;
+    gap: 0.85rem 1rem !important;
+
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+}
+
+/* 3. Each field stacks its label above its input. */
+html body .filter-bar .filter-field,
+html body .report-filters .filter-field,
+html body .filter-box .filter-field {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 0.35rem !important;
+
+    flex: 0 1 auto !important;
+    min-width: 150px !important;
+    max-width: 100% !important;
+}
+
+/* 4. The "grow" field (usually the search input) takes the slack. */
+html body .filter-bar .filter-field.grow,
+html body .report-filters .filter-field.grow,
+html body .filter-box .filter-field.grow {
+    flex: 1 1 240px !important;
+    min-width: 220px !important;
+}
+
+/* 5. Every control is full width inside its field. */
+html body .filter-bar .filter-field input,
+html body .filter-bar .filter-field select,
+html body .filter-bar .filter-field textarea,
+html body .report-filters .filter-field input,
+html body .report-filters .filter-field select,
+html body .filter-box .filter-field input,
+html body .filter-box .filter-field select {
+    width: 100% !important;
+    box-sizing: border-box !important;
+}
+
+/* 6. Buttons sit inline at the end of the row, aligned with the fields. */
+html body .filter-bar form > button,
+html body .filter-bar form > .btn,
+html body .filter-bar form > a.btn,
+html body .filter-row > button,
+html body .filter-row > .btn,
+html body .filter-row > a.btn {
+    flex: 0 0 auto !important;
+    align-self: flex-end !important;
+}
+
+/* 7. Nested sub-forms (e.g. bulk_assign.php has an inner filter-row
+      inside a filter-bar) behave the same way. */
+html body .filter-bar .filter-row,
+html body .filter-bar .filter-row > * {
+    box-sizing: border-box;
+}
+
+/* 8. Narrow phones — go back to one column per field. */
+@media (max-width: 600px) {
+    html body .filter-bar .filter-field,
+    html body .filter-bar .filter-field.grow,
+    html body .filter-bar form > button,
+    html body .filter-bar form > .btn,
+    html body .filter-bar form > a.btn {
+        flex: 1 1 100% !important;
+        width: 100% !important;
+        min-width: 0 !important;
+    }
+}
+
+/* ==========================================================================
+   21. Drawer close / minimize button
+   ========================================================================== */
+.drawer-close {
+    position: absolute;
+    top: 1rem;
+    right: 1rem;
+
+    width: 40px;
+    height: 40px;
+    padding: 0;
+    margin: 0;
+
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid var(--glass-border);
+    border-radius: 8px;
+
+    color: var(--text-muted);
+    font-size: 1.6rem;
+    line-height: 1;
+    font-weight: 400;
+    cursor: pointer;
+
+    transition: background 0.15s ease,
+                color 0.15s ease,
+                border-color 0.15s ease,
+                transform 0.15s ease;
+}
+
+.drawer-close:hover,
+.drawer-close:focus-visible {
+    background: rgba(255, 255, 255, 0.10);
+    border-color: var(--glass-border-light);
+    color: var(--text-white);
+    outline: none;
+}
+
+.drawer-close:active {
+    transform: scale(0.94);
+}
+
+/* The drawer already has `padding-top: 5rem`, which leaves room for this
+   button without overlapping the first nav link. */
+.mainnav {
+    padding-top: 4.5rem;  /* was 5rem — tightens the space since we now
+                             have a real close button up there */
+}

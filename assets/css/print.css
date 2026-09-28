@@ -1,0 +1,195 @@
+/* ==========================================================================
+   assets/css/print.css
+   Loaded with <link rel="stylesheet" media="print"> — applies only when
+   printing. Hides all chrome unconditionally, then reveals the region to
+   print. Works with any markup because it hides everything first.
+   ========================================================================== */
+
+@page {
+    margin: 12mm 10mm;
+    size: A4 portrait;
+}
+
+/* --- 1. Reset the shell so content flows across pages --- */
+html, body {
+    background: #ffffff !important;
+    background-image: none !important;
+    color: #000000 !important;
+    height: auto !important;
+    width: auto !important;
+    overflow: visible !important;
+    margin: 0 !important;
+    padding: 0 !important;
+}
+
+.app-viewport,
+.content-wrapper,
+.table-responsive,
+.table-wrapper,
+.activity-scroll {
+    display: block !important;
+    position: static !important;
+    height: auto !important;
+    max-height: none !important;
+    min-height: 0 !important;
+    overflow: visible !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    box-shadow: none !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    background: transparent !important;
+}
+
+/* --- 2. Hide EVERYTHING, then reveal only what we want --- */
+body * {
+    visibility: hidden !important;
+    box-shadow: none !important;
+    text-shadow: none !important;
+}
+
+/* Reveal the printable regions and their children */
+.content-wrapper,
+.content-wrapper *,
+.receipt-box,
+.receipt-box *,
+.print-area,
+.print-area * {
+    visibility: visible !important;
+}
+
+/* --- 3. But hide these specific things even inside content --- */
+.topbar,
+.mainnav,
+.hamburger,
+footer,
+.no-print,
+.filter-bar,
+.filter-row,
+.page-actions,
+.pagination,
+.connectivity-badge,
+#toastContainer,
+.glass-toast,
+.notif-bell,
+.notif-dropdown,
+button,
+.btn,
+input[type="submit"],
+input[type="button"],
+select,
+.nav,
+.sidebar,
+.menu {
+    display: none !important;
+    visibility: hidden !important;
+}
+
+/* --- 4. Typography: solid black on white --- */
+body, p, span, label, small, div, td, th, h1, h2, h3, h4, h5, li {
+    color: #000000 !important;
+    -webkit-text-fill-color: #000000 !important;
+    background: transparent !important;
+}
+
+h1, h2, h3, h4, h5 {
+    border-left: none !important;
+    padding-left: 0 !important;
+    margin: 10px 0 6px !important;
+    page-break-after: avoid;
+}
+
+a, a:visited {
+    color: #000000 !important;
+    -webkit-text-fill-color: #000000 !important;
+    text-decoration: none !important;
+    border-bottom: none !important;
+}
+
+/* --- 5. Tables --- */
+table, .data-table {
+    width: 100% !important;
+    border-collapse: collapse !important;
+    font-size: 10.5pt !important;
+}
+
+th {
+    background: #efefef !important;
+    color: #000000 !important;
+    border: 1px solid #777777 !important;
+    padding: 6px 8px !important;
+    text-transform: none !important;
+    letter-spacing: 0 !important;
+}
+
+td {
+    background: #ffffff !important;
+    color: #000000 !important;
+    border: 1px solid #cccccc !important;
+    padding: 6px 8px !important;
+}
+
+thead {
+    display: table-header-group;
+}
+
+tr, .stat-card, .card, .receipt-box {
+    page-break-inside: avoid;
+}
+
+/* --- 6. Cards / stat tiles --- */
+.card-grid { display: block !important; }
+
+.stat-card, .card, .activity-card {
+    background: #ffffff !important;
+    border: 1px solid #cccccc !important;
+    color: #000000 !important;
+    box-shadow: none !important;
+    margin: 0 0 8px 0 !important;
+    padding: 8px 10px !important;
+}
+
+.stat-value { color: #000000 !important; font-size: 14pt !important; }
+.stat-label { color: #333333 !important; }
+
+/* --- 7. Alerts --- */
+.alert, .flash-message {
+    background: #ffffff !important;
+    border: 1px solid #999999 !important;
+    color: #000000 !important;
+    box-shadow: none !important;
+}
+
+/* --- 8. Receipt-specific --- */
+.receipt-box {
+    background: #ffffff !important;
+    color: #000000 !important;
+    border: 1px solid #333333 !important;
+    padding: 18px 20px !important;
+    margin: 0 auto !important;
+    max-width: 100% !important;
+}
+
+.receipt-box h1 {
+    border-bottom: 2px solid #000000 !important;
+    padding-bottom: 8px !important;
+    text-align: center !important;
+}
+
+.receipt-row {
+    border-bottom: 1px dashed #999999 !important;
+}
+
+.receipt-row span { color: #000000 !important; }
+
+.receipt-total {
+    border-top: 2px solid #000000 !important;
+    border-bottom: none !important;
+    font-weight: 700 !important;
+}
+
+/* --- 9. Preserve colours on supporting browsers --- */
+* {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+}

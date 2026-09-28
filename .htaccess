@@ -1,0 +1,52 @@
+# .htaccess
+# Improvement 19: Deployment - hardening for a real Apache/XAMPP deploy.
+# None of this matters for the PHP built-in dev server (php -S), which
+# ignores .htaccess entirely - it only takes effect once this sits in
+# htdocs under real Apache, which is the point: a school project marked
+# "complete" only when it's actually deployable, not just runnable
+# locally via `php -S`.
+
+# ------------------------------------------------------------
+# Block direct access to anything that is data, not application code.
+# ------------------------------------------------------------
+<FilesMatch "\.(env|sqlite|sqlite-journal|db|log|sql)$">
+    Require all denied
+</FilesMatch>
+
+<Files "error_log.txt">
+    Require all denied
+</Files>
+
+RedirectMatch 404 /\.git
+
+Options -Indexes
+
+# ------------------------------------------------------------
+# Basic security headers + Content Security Policy.
+# ------------------------------------------------------------
+<IfModule mod_headers.c>
+    Header set X-Content-Type-Options "nosniff"
+    Header set X-Frame-Options "SAMEORIGIN"
+    Header set Referrer-Policy "strict-origin-when-cross-origin"
+
+    # Strip any CSP that a parent scope might be setting, then install
+    # ours with WebAssembly permission so sql.js can compile SQLite.
+    # 'wasm-unsafe-eval' only allows WASM; it does NOT re-enable
+    # inline JS, eval(), or third-party scripts.
+    Header always unset Content-Security-Policy
+    Header always set Content-Security-Policy "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self'; frame-ancestors 'self'; base-uri 'self'; form-action 'self'; manifest-src 'self'; worker-src 'self'"
+</IfModule>
+
+# ------------------------------------------------------------
+# WebAssembly MIME type (for sql-wasm.wasm).
+# ------------------------------------------------------------
+AddType application/wasm .wasm
+
+# ------------------------------------------------------------
+# Force HTTPS - commented out for local XAMPP dev.
+# ------------------------------------------------------------
+# <IfModule mod_rewrite.c>
+#     RewriteEngine On
+#     RewriteCond %{HTTPS} off
+#     RewriteRule ^(.*)$ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
+# </IfModule>

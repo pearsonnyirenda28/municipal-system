@@ -18,7 +18,7 @@ CREATE TABLE IF NOT EXISTS Users (
     user_id        INTEGER PRIMARY KEY AUTOINCREMENT,
     username       TEXT NOT NULL UNIQUE,
     password_hash  TEXT NOT NULL,
-    role           TEXT NOT NULL CHECK (role IN ('Admin','Officer','MeterReader','Clerk','Supervisor')),
+    role           TEXT NOT NULL CHECK (role IN ('Admin','Officer','MeterReader','Clerk','PoliceSupervisor','MeterSupervisor')),
     full_name      TEXT NOT NULL,
     created_at     TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
@@ -41,21 +41,40 @@ CREATE TABLE IF NOT EXISTS Cases (
 
 -- ------------------------------------------------------------
 -- Fines
+--
+-- is_duplicate_flagged / duplicate_resolved_by / duplicate_resolved_at:
+-- set when a supervisor reviews a possible-duplicate group on
+-- meter-readings/duplicates.php. Once resolved, the flag is cleared
+-- and those two columns record which supervisor decided and when.
+--
+-- discarded_at / discarded_by / discard_reason: SOFT DELETE. When a
+-- supervisor chooses one duplicate to keep, the losing rows are NOT
+-- deleted - they are marked as discarded and filtered out of every
+-- live view. The row (and its foreign-key links) survives for audit.
 -- ------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS Fines (
-    fine_id         INTEGER PRIMARY KEY AUTOINCREMENT,
-    fine_number     TEXT NOT NULL UNIQUE,
-    case_id         INTEGER NULL,
-    offender_name   TEXT NOT NULL,
-    house_number    TEXT NULL,
-    vehicle_plate   TEXT NULL,
-    offence_type    TEXT NOT NULL,
-    amount          NUMERIC NOT NULL CHECK (amount > 0),
-    payment_status  TEXT NOT NULL DEFAULT 'Unpaid' CHECK (payment_status IN ('Unpaid','Paid')),
-    issued_by       INTEGER NULL,
-    date_issued     TEXT NOT NULL,
+    fine_id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+    fine_number              TEXT NOT NULL UNIQUE,
+    case_id                  INTEGER NULL,
+    offender_name            TEXT NOT NULL,
+    house_number             TEXT NULL,
+    vehicle_plate            TEXT NULL,
+    offence_type             TEXT NOT NULL,
+    amount                   NUMERIC NOT NULL CHECK (amount > 0),
+    payment_status           TEXT NOT NULL DEFAULT 'Unpaid' CHECK (payment_status IN ('Unpaid','Paid')),
+    issued_by                INTEGER NULL,
+    date_issued              TEXT NOT NULL,
+    client_ref               TEXT NULL UNIQUE,
+    is_duplicate_flagged     INTEGER NOT NULL DEFAULT 0,
+    duplicate_resolved_by    INTEGER NULL,
+    duplicate_resolved_at    TEXT NULL,
+    discarded_at             TEXT NULL,
+    discarded_by             INTEGER NULL,
+    discard_reason           TEXT NULL,
     FOREIGN KEY (case_id) REFERENCES Cases(case_id) ON DELETE SET NULL,
-    FOREIGN KEY (issued_by) REFERENCES Users(user_id) ON DELETE SET NULL
+    FOREIGN KEY (issued_by) REFERENCES Users(user_id) ON DELETE SET NULL,
+    FOREIGN KEY (duplicate_resolved_by) REFERENCES Users(user_id) ON DELETE SET NULL,
+    FOREIGN KEY (discarded_by) REFERENCES Users(user_id) ON DELETE SET NULL
 );
 
 -- ------------------------------------------------------------
@@ -73,32 +92,64 @@ CREATE TABLE IF NOT EXISTS Payments (
 );
 
 -- ------------------------------------------------------------
+-- Wards
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS Wards (
+    ward_id      INTEGER PRIMARY KEY AUTOINCREMENT,
+    ward_name    TEXT NOT NULL UNIQUE,
+    description  TEXT NULL
+);
+
+-- ------------------------------------------------------------
+-- WardAssignments
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS WardAssignments (
+    assignment_id  INTEGER PRIMARY KEY AUTOINCREMENT,
+    ward_id        INTEGER NOT NULL,
+    user_id        INTEGER NOT NULL,
+    assigned_at    TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (ward_id) REFERENCES Wards(ward_id) ON DELETE CASCADE,
+    FOREIGN KEY (user_id) REFERENCES Users(user_id) ON DELETE CASCADE,
+    UNIQUE (ward_id, user_id)
+);
+
+-- ------------------------------------------------------------
 -- Houses
 -- ------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS Houses (
     house_id       INTEGER PRIMARY KEY AUTOINCREMENT,
     house_number   TEXT NOT NULL,
-    ward           TEXT NOT NULL,
+    street         TEXT NULL,
+    ward_id        INTEGER NULL,
     owner_name     TEXT NOT NULL,
     meter_number   TEXT NOT NULL UNIQUE,
-    address        TEXT NULL
+    address        TEXT NULL,
+    FOREIGN KEY (ward_id) REFERENCES Wards(ward_id) ON DELETE SET NULL
 );
 
 -- ------------------------------------------------------------
 -- MeterReadings
 -- ------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS MeterReadings (
-    reading_id        INTEGER PRIMARY KEY AUTOINCREMENT,
-    house_id          INTEGER NOT NULL,
-    previous_reading  NUMERIC NOT NULL,
-    current_reading   NUMERIC NOT NULL,
-    consumption       NUMERIC NOT NULL,
-    is_abnormal       INTEGER NOT NULL DEFAULT 0,
-    reader_id         INTEGER NULL,
-    date_taken        TEXT NOT NULL,
-    client_ref        TEXT NULL,
+    reading_id                INTEGER PRIMARY KEY AUTOINCREMENT,
+    house_id                  INTEGER NOT NULL,
+    previous_reading          NUMERIC NOT NULL,
+    current_reading           NUMERIC NOT NULL,
+    consumption               NUMERIC NOT NULL,
+    is_abnormal               INTEGER NOT NULL DEFAULT 0,
+    reader_id                 INTEGER NULL,
+    date_taken                TEXT NOT NULL,
+    client_ref                TEXT NULL,
+    is_duplicate_flagged      INTEGER NOT NULL DEFAULT 0,
+    duplicate_resolved_by     INTEGER NULL,
+    duplicate_resolved_at     TEXT NULL,
+    discarded_at              TEXT NULL,
+    discarded_by              INTEGER NULL,
+    discard_reason            TEXT NULL,
     FOREIGN KEY (house_id) REFERENCES Houses(house_id) ON DELETE CASCADE,
     FOREIGN KEY (reader_id) REFERENCES Users(user_id) ON DELETE SET NULL,
+    FOREIGN KEY (duplicate_resolved_by) REFERENCES Users(user_id) ON DELETE SET NULL,
+    FOREIGN KEY (discarded_by) REFERENCES Users(user_id) ON DELETE SET NULL,
     CHECK (current_reading >= previous_reading),
     UNIQUE (house_id, date_taken, client_ref)
 );
@@ -120,6 +171,26 @@ CREATE TABLE IF NOT EXISTS DamagedMeters (
 );
 
 -- ------------------------------------------------------------
+-- HouseVisits
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS HouseVisits (
+    visit_id     INTEGER PRIMARY KEY AUTOINCREMENT,
+    house_id     INTEGER NOT NULL,
+    reader_id    INTEGER NOT NULL,
+    visit_date   TEXT NOT NULL,
+    status       TEXT NOT NULL DEFAULT 'Pending' CHECK (status IN
+                     ('Pending','Completed','Skipped','DamagedMeter','Vacant',
+                      'Locked','IllegalConnection','RevisitRequired')),
+    reading_id   INTEGER NULL,
+    notes        TEXT NULL,
+    updated_at   TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (house_id) REFERENCES Houses(house_id) ON DELETE CASCADE,
+    FOREIGN KEY (reader_id) REFERENCES Users(user_id) ON DELETE CASCADE,
+    FOREIGN KEY (reading_id) REFERENCES MeterReadings(reading_id) ON DELETE SET NULL,
+    UNIQUE (house_id, reader_id, visit_date)
+);
+
+-- ------------------------------------------------------------
 -- ActivityLogs
 -- ------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS ActivityLogs (
@@ -132,18 +203,20 @@ CREATE TABLE IF NOT EXISTS ActivityLogs (
 );
 
 -- ============================================================
--- Seed data - sample houses so Meter Readings has something to pick
--- from. No Users are seeded here; run setup_admin.php once in the
--- browser to create the first Administrator account (see README.md).
+-- Seed data
 -- ============================================================
 
-INSERT OR IGNORE INTO Houses (house_number, ward, owner_name, meter_number, address) VALUES
-    ('142', 'Ward 3', 'T. Moyo',   'MTR-0142', '142 Beitbridge North'),
-    ('087', 'Ward 1', 'S. Ncube',  'MTR-0087', '87 Dulivhadzimu'),
-    ('215', 'Ward 3', 'P. Dube',   'MTR-0215', '215 Beitbridge North');
+INSERT OR IGNORE INTO Wards (ward_name, description) VALUES
+    ('Ward 1', 'Dulivhadzimu area'),
+    ('Ward 3', 'Beitbridge North area');
 
--- Give the sample houses a starting reading so consumption can be
--- calculated the first time each is read through the system.
+INSERT OR IGNORE INTO Houses (house_number, street, ward_id, owner_name, meter_number, address)
+SELECT '142', 'North Road', ward_id, 'T. Moyo', 'MTR-0142', '142 Beitbridge North' FROM Wards WHERE ward_name = 'Ward 3'
+UNION ALL
+SELECT '087', 'Dulivhadzimu Street', ward_id, 'S. Ncube', 'MTR-0087', '87 Dulivhadzimu' FROM Wards WHERE ward_name = 'Ward 1'
+UNION ALL
+SELECT '215', 'North Road', ward_id, 'P. Dube', 'MTR-0215', '215 Beitbridge North' FROM Wards WHERE ward_name = 'Ward 3';
+
 INSERT OR IGNORE INTO MeterReadings (house_id, previous_reading, current_reading, consumption, is_abnormal, reader_id, date_taken, client_ref)
 SELECT house_id, 1240.00, 1240.00, 0, 0, NULL, CURRENT_DATE, 'seed-' || house_id
 FROM Houses;

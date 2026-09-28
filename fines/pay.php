@@ -28,6 +28,8 @@ if ($fine['payment_status'] === 'Paid') {
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$error) {
+    verifyCsrf();
+
     $amountReceived = trim($_POST['amount_received'] ?? '');
 
     if (!is_numeric($amountReceived) || (float) $amountReceived <= 0) {
@@ -83,6 +85,7 @@ require __DIR__ . '/../includes/header.php';
     <p><strong>Amount due:</strong> US$<?= number_format((float) $fine['amount'], 2) ?></p>
 
     <form method="post">
+        <?= csrfField() ?>
         <input type="hidden" name="fine_id" value="<?= $fineId ?>">
         <label for="amount_received">Amount received (US$)</label>
         <input type="number" id="amount_received" name="amount_received" step="0.01"

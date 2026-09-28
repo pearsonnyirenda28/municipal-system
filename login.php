@@ -23,6 +23,8 @@ if (!empty($_GET['timeout'])) {
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    verifyCsrf();
+
     $username = trim($_POST['username'] ?? '');
     $password = (string) ($_POST['password'] ?? '');
 
@@ -60,30 +62,49 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Login &mdash; <?= htmlspecialchars(APP_NAME) ?></title>
-<link rel="stylesheet" href="assets/css/style.css">
+<link rel="stylesheet" href="/municipal-system/assets/css/style.css">
 </head>
-<body>
-<div class="login-wrap">
-    <div class="login-box">
-        <h1><?= htmlspecialchars(APP_NAME) ?></h1>
-        <p class="subtitle">Beitbridge Municipality</p>
+<body class="login-body">
+
+    <div class="login-card">
+        <span class="brand-title"><?= htmlspecialchars(APP_NAME) ?></span>
+        <span class="brand-sub">Beitbridge Municipality</span>
 
         <?php if ($error): ?>
-            <div class="alert error"><?= htmlspecialchars($error) ?></div>
+            <div class="errorlist"><?= htmlspecialchars($error) ?></div>
         <?php endif; ?>
 
         <form method="post" novalidate>
-            <label for="username">Username</label>
-            <input type="text" id="username" name="username" required autofocus
-                   value="<?= htmlspecialchars($_POST['username'] ?? '') ?>">
+            <?= csrfField() ?>
 
-            <label for="password">Password</label>
-            <input type="password" id="password" name="password" required>
+            <div class="form-group">
+                <label for="username">Username</label>
+                <input type="text" id="username" name="username" required autofocus
+                       value="<?= htmlspecialchars($_POST['username'] ?? '') ?>">
+            </div>
 
-            <button type="submit" class="btn" style="width:100%;">Login</button>
+            <div class="form-group">
+                <label for="password">Password</label>
+                <div class="password-wrap">
+                    <input type="password" id="password" name="password" required>
+                    <button type="button"
+                            class="password-toggle"
+                            data-password-toggle="password"
+                            aria-label="Show password"
+                            aria-pressed="false"
+                            title="Show / hide password">
+                        <span class="eye-icon eye-show" aria-hidden="true">👁</span>
+                        <span class="eye-icon eye-hide" aria-hidden="true" hidden>🙈</span>
+                    </button>
+                </div>
+            </div>
+
+            <button type="submit" class="btn-login">Login</button>
         </form>
 
+       
     </div>
-</div>
+
+    <script src="/municipal-system/assets/js/password-toggle.js"></script>
 </body>
 </html>

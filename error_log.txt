@@ -1,0 +1,6 @@
+[2026-07-21 07:08:33] Fatal: Uncaught PDOException: SQLSTATE[23000]: Integrity constraint violation: 19 UNIQUE constraint failed: MeterReadings.house_id, MeterReadings.date_taken, MeterReadings.client_ref in Command line code:9
+Stack trace:
+#0 Command line code(9): PDOStatement->execute()
+#1 {main}
+  thrown in Command line code on line 9
+[2026-08-16 16:21:26] PDOException (uncaught): SQLSTATE[HY000]: General error: 1 no such table: Users in C:\xampp\htdocs\municipal-system\setup_admin.php on line 14

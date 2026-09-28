@@ -1,0 +1,16 @@
+{
+  "name": "Municipal Police and Meter Reading Management System",
+  "short_name": "Municipal System",
+  "description": "Beitbridge Municipality - police cases, fines, and water meter reading management, built to keep working in the field without a connection.",
+  "start_url": "/municipal-system/dashboard.php",
+  "scope": "/municipal-system/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#F7F9FB",
+  "theme_color": "#16223E",
+  "icons": [
+    { "src": "/municipal-system/assets/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/municipal-system/assets/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/municipal-system/assets/icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

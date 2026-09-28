@@ -9,16 +9,43 @@ require_once __DIR__ . '/../includes/auth.php';
 requireRole(['Admin', 'MeterReader']);
 
 $db = getDb();
-$houses = $db->query('SELECT house_id, house_number, ward FROM Houses ORDER BY house_number')->fetchAll();
+$user = currentUser();
+
+// Version 2.5: a MeterReader only reports damage against houses in
+// wards they're assigned to - Admin sees every house.
+$where = '';
+$params = [];
+if ($user['role'] === 'MeterReader') {
+    $wardIds = getAssignedWardIds($db, (int) $user['id']);
+    if ($wardIds) {
+        $placeholders = implode(',', array_fill(0, count($wardIds), '?'));
+        $where = "WHERE h.ward_id IN ({$placeholders})";
+        $params = $wardIds;
+    } else {
+        $where = 'WHERE 1=0';
+    }
+}
+$stmt = $db->prepare(
+    "SELECT h.house_id, h.house_number, h.street, w.ward_name
+     FROM Houses h LEFT JOIN Wards w ON w.ward_id = h.ward_id
+     {$where} ORDER BY h.house_number"
+);
+$stmt->execute($params);
+$houses = $stmt->fetchAll();
 
 $errors = [];
-$old = ['house_id' => '', 'description' => ''];
+$old = ['house_id' => (string) (int) ($_GET['house_id'] ?? 0), 'description' => ''];
+if ($old['house_id'] === '0') {
+    $old['house_id'] = '';
+}
 $success = false;
 
 const MAX_PHOTO_BYTES = 5 * 1024 * 1024; // 5MB
 const ALLOWED_PHOTO_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    verifyCsrf();
+
     $old = [
         'house_id'    => (int) ($_POST['house_id'] ?? 0),
         'description' => trim($_POST['description'] ?? ''),
@@ -71,7 +98,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'reported_by' => currentUser()['id'],
             ]);
             logActivity(currentUser()['id'], "Reported damaged meter for house_id {$old['house_id']}");
+
+            // Version 3.0: if this house is part of today's guided round,
+            // reflect the damage report as today's visit status too.
+            upsertHouseVisit($db, (int) $old['house_id'], (int) currentUser()['id'], date('Y-m-d'), 'DamagedMeter');
+
             $success = true;
+            $reportedHouseId = (int) $old['house_id'];
             $old = ['house_id' => '', 'description' => ''];
         } catch (PDOException $e) {
             error_log('report damage failed: ' . $e->getMessage());
@@ -87,20 +120,31 @@ require __DIR__ . '/../includes/header.php';
 <p class="subtitle">A photo is optional but helps whoever schedules the repair.</p>
 
 <?php if ($success): ?>
-    <div class="alert success">Damage report saved. <a href="list.php">View all reports</a>.</div>
+    <div class="alert success">
+        Damage report saved. <a href="list.php">View all reports</a>
+        &nbsp;|&nbsp; <a href="/municipal-system/meter-readings/capture.php">Continue Round</a>
+    </div>
 <?php endif; ?>
 <?php if ($errors): ?>
     <div class="alert error"><?php foreach ($errors as $e): ?>&bull; <?= htmlspecialchars($e) ?><br><?php endforeach; ?></div>
 <?php endif; ?>
 
 <div class="form-panel">
+    <?php if (!$houses): ?>
+        <div class="alert warning">
+            <?= $user['role'] === 'MeterReader'
+                ? "You aren't assigned to any ward yet, so there are no houses to report against. Ask an Administrator to assign you to a ward."
+                : "No houses have been added yet." ?>
+        </div>
+    <?php endif; ?>
     <form method="post" enctype="multipart/form-data">
+        <?= csrfField() ?>
         <label for="house_id">House</label>
         <select id="house_id" name="house_id" required>
             <option value="">-- Select a house --</option>
             <?php foreach ($houses as $h): ?>
                 <option value="<?= (int) $h['house_id'] ?>" <?= (string) $old['house_id'] === (string) $h['house_id'] ? 'selected' : '' ?>>
-                    <?= htmlspecialchars($h['house_number']) ?> (<?= htmlspecialchars($h['ward']) ?>)
+                    <?= htmlspecialchars($h['house_number']) ?> (<?= htmlspecialchars($h['ward_name'] ?? 'No ward') ?>)
                 </option>
             <?php endforeach; ?>
         </select>

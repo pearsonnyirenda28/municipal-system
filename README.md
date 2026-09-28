@@ -15,6 +15,179 @@ file that is never uploaded to GitHub.
 > was written in (no PHP available there to run it against). Please test
 > locally and let me know if anything needs fixing - that's the next step.
 
+## Recent fixes and additions
+
+- **Fixed a Windows path bug**: `setup_database.php` and the database
+  connection were failing on Windows/XAMPP with "mkdir(): No such file or
+  directory" / "unable to open database file". The cause: PHP's `__DIR__`
+  returns backslash paths on Windows (`C:\xampp\...`), but the old check
+  for "is this already an absolute path?" only recognised forward slashes,
+  so `__DIR__` got prepended a second time, producing a garbled path with
+  a drive letter stuck in the middle. Fixed in `config.php`
+  (`resolveDbPath()`), used consistently by both `db.php` and
+  `setup_database.php` now.
+- **Hamburger menu** for mobile/tablet screens (under ~860px wide) - the
+  top navigation collapses behind a &#9776; button, since officers and
+  meter readers are expected to use this mostly on phones in the field.
+- **Police and meter-reading supervisors are now separate roles**
+  (`PoliceSupervisor` / `MeterSupervisor`, not one generic `Supervisor`).
+  A police supervisor's dashboard, menu, and reports only ever show case
+  and fine data; a meter-reading supervisor's only ever show meter reading
+  and damaged-meter data - each is blind to the other's domain, not just
+  in the menu but in what the dashboard actually queries.
+- **CSRF protection** on every form and on the JSON API used by offline
+  sync. Every `<form method="post">` now carries a hidden, per-session
+  token (`includes/auth.php` - `csrfToken()` / `csrfField()`), and every
+  POST handler verifies it (`verifyCsrf()`) before touching the database.
+  The `fetch()` calls in `meter-reading.js` send the same token as an
+  `X-CSRF-Token` header, checked server-side by `verifyCsrfHeader()`.
+- **Stronger password policy**: passwords now need 8+ characters with an
+  uppercase letter, a lowercase letter, and a number, and can't be the
+  account's own username/full name or one of a short list of common
+  passwords (`passwordPolicyErrors()` in `includes/auth.php`, used by both
+  `setup_admin.php` and `users/create.php`).
+- **XSS audit**: went through every `<?=` output in the codebase by hand.
+  SQL injection was already covered everywhere (every query goes through
+  PDO prepared statements), and it turned out output escaping
+  (`htmlspecialchars()`) was already consistently applied to every place
+  user-entered text gets displayed - offender names, descriptions, receipt
+  fields, report tables, all of it. What was genuinely missing were
+  **security headers**: `includes/auth.php` now sends
+  `X-Content-Type-Options`, `X-Frame-Options: DENY` (blocks clickjacking),
+  and a `Content-Security-Policy` restricting scripts/styles/images to
+  this app's own origin, as defence-in-depth on top of the escaping.
+- **Session hardening**: the session cookie is now set `HttpOnly`
+  (JavaScript can never read it, even via an XSS bug) and `SameSite=Lax`
+  (blocks it being sent on cross-site form submissions, a second layer
+  against CSRF beyond the token itself).
+- **Pagination and search** on every list page (Cases, Fines, Meter
+  Readings, Damaged Meters, Users) - `includes/pagination.php` is a small
+  shared helper (`paginate()`, `renderPagination()`, `renderSearchBox()`)
+  used consistently across all five, so a page with 500 fines behaves the
+  same as one with 5.
+- **Responsive tables**: every data table (list pages and reports) is now
+  wrapped in a horizontally-scrolling container on narrow screens, instead
+  of squashing columns unreadably on a phone.
+- **Dashboard widget**: a "Recent Activity" panel at the bottom of the
+  dashboard - Admin sees the whole system's recent activity, everyone
+  else sees only their own (kept consistent with the
+  PoliceSupervisor/MeterSupervisor data separation above).
+- Assorted mobile spacing fixes (login box, form panels, page headers)
+  that were technically responsive before but cramped on a small phone.
+- **Version 2.0 is now complete.** The two items left open last round:
+  - **Login history** (`users/login_history.php`, Admin only) - every
+    successful login, failed attempt, and logout was already being
+    written to `ActivityLogs`; this gives it a proper screen, filterable
+    by outcome, user, and date range, with IP address shown per event.
+  - **Advanced filters**: every list page (Cases, Fines, Meter Readings,
+    Damaged Meters, Users) now has a real multi-field filter bar - date
+    ranges, status/role/ward dropdowns, and search, all combined in one
+    form - instead of the single-click status-only links from before.
+- **Version 2.5 - Ward-Based Operations is now complete.**
+  - **Wards are a real managed entity now**, not a free-text field on
+    Houses. New `Wards` and `WardAssignments` tables; `wards/list.php`
+    and `wards/create.php` (Admin) manage wards, `wards/assign.php`
+    assigns/unassigns meter readers to a ward (many-to-many - a reader
+    can cover more than one ward).
+  - **A whole new Houses module** (`houses/`) - there was no house
+    management UI at all before this, only seed data. `houses/list.php`
+    (filter by ward and street, search, paginated), `houses/create.php`
+    and `houses/edit.php` (each house picks its ward from a dropdown, not
+    free text), and `houses/bulk_assign.php` - the "bulk assignment
+    tools" requirement - filter down a list of houses and move all of
+    them to a different ward in one save.
+  - **Meter readers now only see their own wards.** Not just filtered in
+    the UI - the underlying queries in `meter-readings/capture.php`,
+    `meter-readings/list.php`, `damaged-meters/report.php`, and
+    `damaged-meters/list.php` all scope to `getAssignedWardIds()`
+    (`includes/db.php`) for the `MeterReader` role. A reader assigned to
+    no ward sees an explicit "ask your Administrator" message rather than
+    either an empty page or, worse, every house in the system.
+  - **Reader dashboard**: daily workload, a progress bar, and remaining
+    houses for the day, scoped to the reader's own assigned wards.
+  - **Existing SQLite databases upgrade automatically.** Since
+    `CREATE TABLE IF NOT EXISTS` can't add columns to a table that
+    already exists, `setup_database.php` now also runs a one-time,
+    repeatable migration (`migrateWardColumns()`) that adds the new
+    `street`/`ward_id` columns to an existing `Houses` table, turns every
+    distinct old free-text ward value into a real row in `Wards`, and
+    points each house at the right one - nothing is deleted, safe to run
+    again, and does nothing on a database that's already been migrated.
+  - `schema.mysql.sql` and `migrate_to_mysql.php` were updated to match
+    (both new tables added, `Houses` column list updated, dependency
+    order preserved so `Wards` migrates before `Houses`).
+  - **Version 3.0 - Guided Field Operations is now complete**, built on a
+    branch (`version-3.0-guided-field-operations`), not on `main` directly.
+    - **New `HouseVisits` table**: one row per house, per reader, per day.
+      A visit is now tracked as its own thing, separate from whether a
+      reading was actually captured - a locked gate or a vacant plot is a
+      completed *visit* even though it isn't a completed *reading*.
+    - **House navigation**: `meter-readings/capture.php` is a guided
+      navigator now, not a free house picker - Previous/Next buttons walk
+      the reader's round in street/house-number order, a "Jump to house"
+      dropdown shows every house with its status, and landing on the page
+      with no `?house_id=` resumes at the first house that hasn't been
+      dealt with yet today.
+    - **Reading status**: alongside the existing meter-reading capture,
+      five explicit status buttons (Skip, Vacant, Locked Premises, Illegal
+      Connection, Revisit Required) record a visit outcome and
+      auto-advance to the next house; "Report Damaged Meter" hands off to
+      the existing damage-report form (now pre-filled with the house) and
+      marks the visit accordingly on save.
+    - **Reader dashboard**: the Version 2.5 workload widget now shows a
+      full status breakdown ("Today's Reading Statistics" - Completed,
+      Skipped, Vacant, etc.), plus an **Unsynced records** count read
+      directly from the browser's own IndexedDB (not guessed server-side).
+    - **Honest limitation**: the five status buttons are online-only for
+      now - unlike meter readings, marking a house Skipped/Vacant/Locked/
+      etc. does not yet work offline. See the roadmap section for why.
+## Version 3.5 - Intelligent Offline Synchronization (complete, on its own branch)
+
+Built on `version-3.5-offline-sync`, branched off `version-3.0-guided-field-operations`
+(not off `main`) since it depends directly on that round's work.
+
+- **Generalized offline queue** (`assets/js/offline-queue.js`) replaces the
+  meter-reading-only `offline-db.js` from Version 3.0. One IndexedDB
+  queue now handles every offline-capable action, and each queued
+  record carries exactly what the roadmap asked for: a UUID
+  (`clientRef`), a persistent per-device ID (`localStorage`, survives
+  across sessions on that device), the user ID, a timestamp, a synced
+  flag, and a retry count with the last error message if it keeps failing.
+- **Closed the gap flagged at the end of Version 3.0**: the five visit-status
+  buttons (Skip/Vacant/Locked/Illegal Connection/Revisit Required) are
+  offline-capable now, via a new JSON endpoint (`api/mark_visit.php`)
+  and `assets/js/status-actions.js`, following the exact same
+  online-first-fall-back-to-queue pattern meter readings already used.
+- **Fine issuing is offline-capable too** (`api/save_fine.php`,
+  `assets/js/fine-issue.js`) - same idempotency approach as meter
+  readings (a `client_ref` column added to `Fines`, checked before
+  insert so a retried sync can't create the same fine twice) and the
+  same "flag, don't reject" duplicate detection (same offender, amount,
+  and day, different `client_ref`).
+- **Conflict review screen** (`sync/conflicts.php`, Admin only) - every
+  "possible duplicate" flag raised during sync, across both meter
+  readings and fines, in one filterable list. This was a gap called out
+  in an earlier round's audit (flags were logged but had no screen);
+  it's closed now.
+- `fines/issue.php` keeps working exactly as before if JavaScript is
+  disabled (the original server-side POST handler is untouched) - the
+  offline behaviour is a progressive enhancement, not a replacement.
+
+**What Version 3.5 does NOT cover yet, on purpose:**
+- **Police Cases are not offline-capable.** The roadmap lists cases
+  alongside fines and meter readings for offline storage; only fines
+  and meter readings (plus visit status) were done this round to keep
+  the change reviewable. Cases would follow the identical pattern
+  (`api/save_case.php` + a client-side queue entry) whenever it's next.
+- **Damaged Meter reports, including photos, are not offline-capable.**
+  This is explicitly the hardest of the four (a photo has to be held as
+  binary data in IndexedDB and uploaded separately once back online),
+  and was deliberately left out of this round rather than rushed.
+- The old `meter-readings/mark_status.php` (the Version 3.0 form-POST
+  status handler) was deleted, fully superseded by `api/mark_visit.php`.
+  If you had that URL bookmarked anywhere, it's gone.
+
+
 ## 1. Requirements
 
 - XAMPP (or WAMP) with PHP 8.1+ - the bundled `pdo_sqlite` extension is
@@ -44,7 +217,7 @@ file that is never uploaded to GitHub.
    protection of its own and should not be left on a live server).
 8. Go to `http://localhost/municipal-system/login.php` and log in.
 9. As Admin, go to **Users > Create User** to add an Officer, MeterReader,
-   Clerk or Supervisor account for testing each role.
+   Clerk, PoliceSupervisor or MeterSupervisor account for testing each role.
 
 ### Switching to MySQL instead of SQLite
 
@@ -70,8 +243,20 @@ Once logged in as Admin, you can:
   photo upload; Admin can then update its repair status.
 - **Users > Create User** - add accounts for each role without touching
   the database directly.
+- **Wards > Create Ward** - two sample wards (Ward 1, Ward 3) already
+  exist from setup; **Wards > Assign Readers** ties a MeterReader account
+  to one or more wards.
+- **Houses > Add House / Bulk Assign to Ward** - three sample houses
+  exist already, each in one of the two sample wards.
 - **Reports** - four filterable reports (Cases, Fines, Meter Readings,
   Damaged Meters), each with a Print button for a clean printed page.
+
+**Important if you're testing as a MeterReader:** that role now only
+sees houses in wards it's been assigned to (Version 2.5). Create a
+MeterReader account, then go to **Wards > Assign Readers** as Admin and
+tick that account for at least one ward - otherwise Meter Readings and
+Damaged Meters will correctly, but perhaps confusingly at first, show
+"you aren't assigned to any ward yet" instead of the sample houses.
 
 ### Testing the offline behaviour
 
@@ -81,18 +266,62 @@ Once logged in as Admin, you can:
 3. Capture a reading and click **Save Reading** - you'll see the orange
    "saved on this device" message, and the **Sync Now** counter will show
    1 pending.
-4. Go back online and click **Sync Now** (or just reload the page) - the
-   reading uploads to the database automatically and disappears from the
-   pending count.
+4. Still offline, try one of the **Skip / Vacant / Locked / Illegal
+   Connection / Revisit Required** buttons on the same page - same
+   behaviour, queued instead of failing outright.
+5. Go to **Fines > Issue a Fine**, still offline, and submit one - same
+   pattern again (this is a different queue entry type, but the same
+   underlying mechanism).
+6. Go back online and click **Sync Now** on any of those pages (or just
+   reload) - everything queued across *all three* actions uploads
+   together, since Version 3.5 unified them into one queue, not three
+   separate ones.
 
 ## 4. Accounts and roles
 
 Use **Users > Create User** (Admin only) to create Officer, MeterReader,
-Clerk and Supervisor accounts once you have your first Admin account from
+Clerk, PoliceSupervisor and MeterSupervisor accounts once you have your first Admin account from
 `setup_admin.php`. There is still no public self-registration screen -
 by design, only an Admin can create accounts (Activity 4, Section 5.2).
 
-## 5. Secrets and .env
+## 5. Moving to MySQL for production
+
+SQLite (the default) is great for development and for a small single-server
+setup, but if you want **MySQL as the main, central database** - for
+example once this goes on a live host, or if the municipality's IT
+department already runs MySQL - here's how to move everything across:
+
+1. Create a MySQL database and import the MySQL-flavoured schema:
+   ```
+   mysql -u root -p -e "CREATE DATABASE municipal_system"
+   mysql -u root -p municipal_system < schema.mysql.sql
+   ```
+   (or use phpMyAdmin's Import tab with `schema.mysql.sql` - `schema.sql`
+   is the SQLite version and won't work against MySQL.)
+2. In `.env`, fill in `DB_HOST`, `DB_NAME`, `DB_USER`, `DB_PASS` for that
+   MySQL database. Leave `DB_DRIVER=sqlite` for now.
+3. Visit `migrate_to_mysql.php` in your browser and click **Start
+   Migration**. It copies every row from your local SQLite file into
+   MySQL, table by table, in the right order so foreign keys line up,
+   and re-syncs MySQL's auto-increment counters afterwards so new
+   records don't collide with the migrated ones.
+4. Once that finishes cleanly, change `.env` to `DB_DRIVER=mysql`. From
+   that point on, the app reads and writes MySQL as the main database -
+   your SQLite file is left untouched (nothing is deleted), so there's
+   a safety net if you ever need to check something against it.
+
+The migration script is safe to run more than once - it uses
+`INSERT IGNORE`, so anything already copied across is simply skipped the
+second time rather than duplicated.
+
+**Why the app can switch drivers at all:** a small number of SQL date
+functions differ between SQLite and MySQL (e.g. "readings from the last
+30 days"). Those are isolated into two helper functions in `includes/db.php`
+(`dbCurrentMonthMatch()` and `dbWithinLast()`) that return the correct SQL
+for whichever `DB_DRIVER` is active, so the rest of the codebase - every
+page, every query - is identical regardless of which database is behind it.
+
+## 6. Secrets and .env
 
 Every setting that could vary between your machine and anyone else's -
 or that is genuinely sensitive, like a future SMS gateway key from Chapter
@@ -105,7 +334,7 @@ Only `.env.example` (with blank/placeholder values) is committed, so anyone
 who clones the repository knows what settings exist without ever seeing
 your real values.
 
-## 6. Putting this on GitHub
+## 7. Putting this on GitHub
 
 1. Create a new repository on GitHub (leave it empty - no README/license,
    since this project already has its own).
@@ -125,7 +354,39 @@ your real values.
 4. Anyone cloning your repository then follows Section 2 above, starting
    from "copy `.env.example` to `.env`".
 
-## 7. Folder structure
+### Pushing a feature branch (like this round's work)
+
+The repository now has three branches:
+- `main` - Versions up to 2.5
+- `version-3.0-guided-field-operations` - branched off `main`
+- `version-3.5-offline-sync` - branched off `version-3.0-guided-field-operations`
+  (not off `main`, since it depends on that round's code)
+
+None of this is merged into `main` yet, so you can review or test each
+round separately before deciding to merge.
+
+```
+git push -u origin main
+git push -u origin version-3.0-guided-field-operations
+git push -u origin version-3.5-offline-sync
+```
+
+On GitHub, that gives you branches you can open Pull Requests from
+(GitHub will offer a "Compare & pull request" button) to review each
+diff before merging - or merge them yourself, **in order**, once you're
+happy:
+
+```
+git checkout main
+git merge version-3.0-guided-field-operations
+git merge version-3.5-offline-sync
+git push
+```
+
+(Merging 3.5 before 3.0 would fail/conflict, since 3.5's history already
+contains 3.0's commits - merging 3.0 first, then 3.5, brings both in cleanly.)
+
+## 8. Folder structure
 
 ```
 municipal-system/
@@ -133,21 +394,27 @@ municipal-system/
 ├── .gitignore
 ├── config.php                <- loads .env, defines constants
 ├── schema.sql                <- SQLite schema, run via setup_database.php
+├── schema.mysql.sql           <- MySQL schema, for production (Section 5)
 ├── setup_database.php        <- creates the SQLite file, run once
 ├── setup_admin.php           <- run once, then delete
+├── migrate_to_mysql.php       <- one-time SQLite -> MySQL data migration
 ├── index.php
 ├── login.php / logout.php
 ├── dashboard.php
 ├── data/                      <- the SQLite database file lives here (gitignored)
 ├── includes/
-│   ├── db.php                 <- PDO connection (SQLite or MySQL) + logActivity()
-│   ├── auth.php                <- session guard, roles, lockout
+│   ├── db.php                 <- PDO connection (SQLite or MySQL) + logActivity() + date-SQL helpers
+│   ├── auth.php                <- session guard, roles, lockout, CSRF, password policy, security headers
+│   ├── pagination.php          <- shared pagination + search box helpers
 │   ├── header.php / footer.php
 ├── assets/
 │   ├── css/style.css
 │   └── js/
-│       ├── offline-db.js       <- IndexedDB wrapper
-│       └── meter-reading.js    <- capture page logic + sync
+│       ├── offline-queue.js    <- generalized IndexedDB sync queue (Version 3.5)
+│       ├── meter-reading.js    <- capture page logic
+│       ├── status-actions.js   <- Skip/Vacant/Locked/... buttons (Version 3.5)
+│       ├── fine-issue.js       <- offline-capable fine issuing (Version 3.5)
+│       └── nav.js               <- hamburger menu toggle
 ├── cases/
 │   ├── list.php / create.php / update_status.php
 ├── fines/
@@ -156,16 +423,24 @@ municipal-system/
 │   ├── list.php / capture.php
 ├── damaged-meters/
 │   ├── list.php / report.php / update_status.php
+├── wards/
+│   ├── list.php / create.php / assign.php
+├── houses/
+│   ├── list.php / create.php / edit.php / bulk_assign.php
 ├── users/
-│   ├── list.php / create.php
+│   ├── list.php / create.php / login_history.php
 ├── reports/
 │   ├── index.php / cases.php / fines.php / readings.php / damage.php
+├── sync/
+│   ├── conflicts.php           <- possible-duplicate review (Version 3.5)
 ├── uploads/damage_photos/     <- photo uploads land here (gitignored)
 └── api/
-    └── save_reading.php        <- JSON endpoint used by the offline JS
+    ├── save_reading.php        <- meter readings (Version 3.0)
+    ├── mark_visit.php          <- visit status marks (Version 3.5)
+    └── save_fine.php           <- fine issuing (Version 3.5)
 ```
 
-## 8. What's built vs. what's still on the roadmap
+## 9. What's built vs. what's still on the roadmap
 
 **Working now:** everything listed in Section 3 above, plus account
 lockout, session timeout, and a full activity log of logins and data
@@ -175,12 +450,35 @@ changes (Chapter 4, Section 5.2).
 - A full offline-installable app shell (service worker) - right now the
   *data* works offline once the Capture Reading page has loaded once, but
   the page itself still needs one online visit first.
-- Editing/deleting existing records (cases, fines, readings) - everything
-  currently supports create, list, and status/payment updates, not full
+- Editing/deleting existing records - Houses now has a proper edit screen
+  (`houses/edit.php`, Version 2.5), but Cases, Fines and Meter Readings
+  still only support create, list, and status/payment updates, not full
   edit-in-place.
-- An admin screen to review the "possible duplicate" flags raised during
-  meter reading sync (they're currently recorded in ActivityLogs, but
-  there's no dedicated review screen yet).
+
+**Version 2.0, 2.5, 3.0, and 3.5 (mobile/security, ward-based operations,
+guided field operations, and offline synchronization) are all complete**
+- see the changelog at the top of this file for the full list, including
+what Version 3.5 deliberately left out (offline Cases, offline Damaged
+Meter reports with photos). **Not yet started:** Version 4.0's full
+installable PWA (a service worker so the app shell itself loads offline,
+not just the data on pages already visited), Version 4.5's
+progress/assignment tools beyond the current dashboard widget, and the
+enterprise-tier features from Version 5.0 (PDF/Excel export, analytics,
+a REST API, 2FA).
+
+**Found during this security pass, not yet fixed:**
+- `setup_database.php`, `setup_admin.php`, and `migrate_to_mysql.php` are
+  all one-time tools not gated behind a login (they can't be, really -
+  `setup_admin.php` in particular has to run *before* any account exists).
+  All three are now CSRF-protected, but someone who finds the URL directly
+  could still trigger them. `setup_database.php` and `setup_admin.php`
+  are self-limiting (they refuse to do anything once an Admin already
+  exists), but `migrate_to_mysql.php` currently isn't - it'll happily
+  re-run for anyone who reaches it. **Delete `migrate_to_mysql.php` once
+  you've actually migrated**, the same way `setup_admin.php` tells you to
+  delete itself. Worth revisiting properly (e.g. requiring an Admin login)
+  before this ever sits on a real public-facing host rather than a local
+  XAMPP install.
 
 These are natural next additions on top of the same database and folder
 structure - none of them require changing what has already been built.

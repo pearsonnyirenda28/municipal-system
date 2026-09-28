@@ -22,6 +22,8 @@ if (!$case) {
 
 $error = '';
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    verifyCsrf();
+
     $newStatus = $_POST['status'] ?? '';
     if (!in_array($newStatus, ['Open', 'In Progress', 'Closed'], true)) {
         $error = 'Please choose a valid status.';
@@ -44,6 +46,7 @@ require __DIR__ . '/../includes/header.php';
 
 <div class="form-panel">
     <form method="post">
+        <?= csrfField() ?>
         <input type="hidden" name="case_id" value="<?= $caseId ?>">
         <label for="status">Status</label>
         <select id="status" name="status">
