@@ -21,21 +21,12 @@
  *   - Already-resolved rows are never re-flagged - a supervisor's
  *     decision that two readings were not duplicates is final.
  */
-require_once __DIR__ . '/../includes/db.php';
+require_once __DIR__ . '/../includes/local_store.php';
 require_once __DIR__ . '/../includes/auth.php';
 
 header('Content-Type: application/json');
 
-if (empty($_SESSION['user_id'])) {
-    http_response_code(401);
-    echo json_encode(['success' => false, 'message' => 'Not logged in.']);
-    exit;
-}
-if (!in_array($_SESSION['role'], ['Admin', 'MeterReader'], true)) {
-    http_response_code(403);
-    echo json_encode(['success' => false, 'message' => 'You do not have permission to do this.']);
-    exit;
-}
+requireApiLogin(['Admin', 'MeterReader']);   // 401 + code on an ended session, 403 on the wrong role, 409 on another user's records
 
 verifyCsrfHeader();
 
@@ -104,6 +95,11 @@ try {
 
     $db->beginTransaction();
 
+    // Version 4.5: this row's idempotency key against the central
+    // Workspace Server. Reuses clientRef when the browser supplied one
+    // (the common case - see includes/local_store.php::resolveSyncId).
+    $syncId = resolveSyncId($clientRef);
+
     // Insert the new reading. is_duplicate_flagged is written directly in
     // the INSERT so the whole group has the same flag from the moment
     // the row exists - no window where the new row is unflagged but its
@@ -111,9 +107,11 @@ try {
     $stmt = $db->prepare(
         'INSERT INTO MeterReadings
             (house_id, previous_reading, current_reading, consumption, is_abnormal,
-             reader_id, date_taken, client_ref, is_duplicate_flagged)
+             reader_id, date_taken, client_ref, is_duplicate_flagged,
+             sync_id, device_id, sync_status)
          VALUES (:house_id, :previous, :current, :consumption, :abnormal,
-                 :reader_id, :date_taken, :client_ref, :is_duplicate)'
+                 :reader_id, :date_taken, :client_ref, :is_duplicate,
+                 :sync_id, :device_id, \'PENDING\')'
     );
     $stmt->execute([
         'house_id'      => $houseId,
@@ -125,6 +123,8 @@ try {
         'date_taken'    => $dateTaken,
         'client_ref'    => $clientRef,
         'is_duplicate'  => $possibleDuplicate ? 1 : 0,
+        'sync_id'       => $syncId,
+        'device_id'     => DEVICE_ID,
     ]);
     $newReadingId = (int) $db->lastInsertId();
 
@@ -137,13 +137,45 @@ try {
            ->execute($existingDuplicateIds);
     }
 
+    // Queue this row for the central Workspace Server - same transaction
+    // as the insert above, so a row can never exist locally without also
+    // being queued (principle: transactional integrity).
+    enqueueForCentralSync($db, $syncId, 'MeterReadings', 'INSERT', [
+        'house_id'             => $houseId,
+        'previous_reading'     => $previous,
+        'current_reading'      => $current,
+        'consumption'          => $consumption,
+        'is_abnormal'          => $isAbnormal ? 1 : 0,
+        'reader_id'            => $_SESSION['user_id'],
+        'date_taken'           => $dateTaken,
+        'client_ref'           => $clientRef,
+        'is_duplicate_flagged' => $possibleDuplicate ? 1 : 0,
+    ]);
+
     $db->commit();
 
     // Version 3.0: a successful reading marks today's visit to this house
     // as Completed - this is the single point both the online-direct save
     // and the later offline sync both pass through, so guided navigation
-    // progress updates correctly either way.
-    upsertHouseVisit($db, $houseId, (int) $_SESSION['user_id'], $dateTaken, 'Completed', $newReadingId);
+    // progress updates correctly either way. Version 4.5: also queued for
+    // the center, under its own fresh sync_id (upsertHouseVisit updates
+    // the row in place over the day, so each call needs a new id, not
+    // the reading's) - reading_sync_id lets api/sync_push.php resolve
+    // this visit's reading_id to whatever the central MySQL actually
+    // assigned that reading, since the local $newReadingId only means
+    // something on this workstation's own SQLite file.
+    $visitSyncId = generateSyncId();
+    $db->beginTransaction();
+    upsertHouseVisit($db, $houseId, (int) $_SESSION['user_id'], $dateTaken, 'Completed', $newReadingId, null, $visitSyncId, DEVICE_ID);
+    enqueueForCentralSync($db, $visitSyncId, 'HouseVisits', 'UPSERT', [
+        'house_id'        => $houseId,
+        'reader_id'       => $_SESSION['user_id'],
+        'visit_date'      => $dateTaken,
+        'status'          => 'Completed',
+        'reading_sync_id' => $syncId,
+        'notes'           => null,
+    ]);
+    $db->commit();
 
     $logMsg = "Captured meter reading for house_id {$houseId} ({$current} m3)";
     if ($possibleDuplicate) {

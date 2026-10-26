@@ -11,7 +11,8 @@
  * loaded, the current house's last reading is embedded directly into the
  * page as JSON, so "Save Reading" works completely offline afterwards.
  * As of Version 3.5, the status buttons (Skip/Vacant/Locked/...) are
- * offline-capable too, via the shared queue in assets/js/offline-queue.js.
+ * offline-capable too, via the shared queue in assets/js/offline-db-sqlite.js
+ * (loaded globally by includes/footer.php - not included again here).
  */
 require_once __DIR__ . '/../includes/db.php';
 require_once __DIR__ . '/../includes/auth.php';
@@ -169,9 +170,9 @@ window.CURRENT_HOUSE = <?= json_encode($current ? [
     'nextHouseId' => $nextHouse ? (int) $nextHouse['house_id'] : null,
 ] : null) ?>;
 </script>
-<script src="/municipal-system/assets/js/offline-queue.js"></script>
-<script src="/municipal-system/assets/js/meter-reading.js"></script>
-<script src="/municipal-system/assets/js/status-actions.js"></script>
+<!-- defer: must run AFTER the footer loads offline-db-sqlite.js (countPending, queueRecord, syncOfflineQueue) -->
+<script defer src="/municipal-system/assets/js/meter-reading.js"></script>
+<script defer src="/municipal-system/assets/js/status-actions.js"></script>
 
 <?php endif; ?>
 

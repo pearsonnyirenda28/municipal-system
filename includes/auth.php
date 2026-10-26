@@ -9,10 +9,20 @@
 require_once __DIR__ . '/db.php';
 
 if (session_status() === PHP_SESSION_NONE) {
+    $isHttps = (!empty($_SERVER['HTTPS']) && strtolower((string) $_SERVER['HTTPS']) !== 'off')
+            || strtolower((string) ($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '')) === 'https';
+
+    session_name(SESSION_COOKIE_NAME);          // own cookie name - see config.php
+    ini_set('session.use_strict_mode', '1');    // refuse session IDs this server never issued (session fixation)
+    ini_set('session.use_only_cookies', '1');   // never accept a session ID from the URL
+    // PHP's own garbage collector must never delete a session sooner than the idle timeout allows.
+    ini_set('session.gc_maxlifetime', (string) max(SESSION_TIMEOUT_SECONDS + 600, 1440));
+
     // Harden the session cookie itself before starting the session.
     session_set_cookie_params([
         'lifetime' => 0,
-        'path'     => '/',
+        'path'     => '/',    // keep "/": the WebSocket handshake is on another port and path
+        'secure'   => $isHttps,   // only sent over HTTPS when the site is served over HTTPS
         'httponly' => true,   // JavaScript can never read the session cookie
         'samesite' => 'Lax',  // blocks the cookie being sent on cross-site POSTs - first line of CSRF defence
     ]);
@@ -40,20 +50,145 @@ if (!headers_sent()) {
 const MAX_FAILED_LOGINS = 5;
 const LOCKOUT_MINUTES    = 10;
 
-/** Redirects to the login page if nobody is logged in, and enforces the
- *  15-minute idle session timeout (Activity 4, Section 5.2). */
-function requireLogin(): void
+/** Fully ends the current session: empties it, expires the cookie in the browser,
+ *  and destroys the server-side data. */
+function endSession(): void
+{
+    $_SESSION = [];
+    if (ini_get('session.use_cookies') && !headers_sent()) {
+        $p = session_get_cookie_params();
+        setcookie(session_name(), '', [
+            'expires'  => time() - 42000,
+            'path'     => $p['path'],
+            'domain'   => $p['domain'],
+            'secure'   => $p['secure'],
+            'httponly' => $p['httponly'],
+            'samesite' => $p['samesite'] ?? 'Lax',
+        ]);
+    }
+    if (session_status() === PHP_SESSION_ACTIVE) {
+        session_destroy();
+    }
+}
+
+/** A fingerprint of the password hash. Stored in the session at login; if the account's
+ *  password is changed or reset anywhere else, the fingerprints stop matching and every
+ *  other open session of that account is ended. */
+function sessionFingerprint(string $passwordHash): string
+{
+    return hash('sha256', $passwordHash);
+}
+
+/**
+ * Is the current session still allowed to exist? Returns null if so, otherwise a short
+ * reason: 'none' (nobody logged in), 'timeout', 'deactivated' or 'password_changed'.
+ *
+ * Every SESSION_REVALIDATE_SECONDS it also re-reads the account from the Users table, so
+ * that deactivating a user, changing their role, or changing their password takes effect on
+ * a session that is already open - before this, "Deactivate" only blocked nothing at all.
+ */
+function sessionProblem(): ?string
 {
     if (empty($_SESSION['user_id'])) {
-        header('Location: /municipal-system/login.php');
-        exit;
+        return 'none';
     }
 
     if (isset($_SESSION['last_activity']) &&
-        (time() - $_SESSION['last_activity']) > SESSION_TIMEOUT_SECONDS) {
-        session_unset();
-        session_destroy();
-        header('Location: /municipal-system/login.php?timeout=1');
+        (time() - (int) $_SESSION['last_activity']) > SESSION_TIMEOUT_SECONDS) {
+        return 'timeout';
+    }
+
+    if ((time() - (int) ($_SESSION['revalidated_at'] ?? 0)) >= SESSION_REVALIDATE_SECONDS) {
+        try {
+            try {
+                $stmt = getDb()->prepare('SELECT full_name, role, is_active, password_hash FROM Users WHERE user_id = :id');
+                $stmt->execute(['id' => $_SESSION['user_id']]);
+                $u = $stmt->fetch();
+            } catch (Throwable $noColumn) {
+                // is_active is an optional column: databases created from the schema files
+                // do not have it. Re-read without it (such accounts count as active) so the
+                // role and password-change checks still work.
+                $stmt = getDb()->prepare('SELECT full_name, role, password_hash FROM Users WHERE user_id = :id');
+                $stmt->execute(['id' => $_SESSION['user_id']]);
+                $u = $stmt->fetch();
+                if ($u) { $u['is_active'] = null; }
+            }
+        } catch (Throwable $e) {
+            error_log('sessionProblem(): could not re-check the account: ' . $e->getMessage());
+            return null;   // a database hiccup must not log everybody out
+        }
+        if (!$u || ($u['is_active'] !== null && (int) $u['is_active'] === 0)) {
+            return 'deactivated';
+        }
+        if (!empty($_SESSION['pw_fingerprint'])
+            && !hash_equals($_SESSION['pw_fingerprint'], sessionFingerprint((string) $u['password_hash']))) {
+            return 'password_changed';
+        }
+        $_SESSION['role']           = $u['role'];        // a role change applies immediately
+        $_SESSION['full_name']      = $u['full_name'];
+        $_SESSION['revalidated_at'] = time();
+    }
+    return null;
+}
+
+/** Redirects to the login page if nobody is logged in (or the session has timed out, or the
+ *  account was deactivated / its password changed), and enforces the idle session timeout
+ *  (Activity 4, Section 5.2). */
+function requireLogin(): void
+{
+    $problem = sessionProblem();
+    if ($problem !== null) {
+        endSession();
+        header('Location: /municipal-system/login.php' . ($problem === 'none' ? '' : '?reason=' . $problem));
+        exit;
+    }
+    $_SESSION['last_activity'] = time();
+}
+
+/**
+ * Guard for the JSON API endpoints (api/save_*.php, api/mark_visit.php).
+ *
+ * Unlike requireLogin() it never redirects: it answers 401 with a machine-readable
+ * "code", so the browser's offline queue can tell "your session ended" (keep the record,
+ * ask the user to log in again) from "this record is bad" (count a failed attempt). It also
+ * applies the same idle-timeout / deactivation / password-change rules as page loads, which
+ * the API endpoints previously skipped entirely.
+ *
+ * The queue sends X-Queued-By: the id of the user who saved the record on the device. If that
+ * is not the user now logged in, the request is refused (409) so that, on a shared computer,
+ * one person's saved records can never be attributed to whoever logs in next.
+ */
+function requireApiLogin(array $allowedRoles = []): void
+{
+    header('Content-Type: application/json');
+
+    $problem = sessionProblem();
+    if ($problem !== null) {
+        endSession();
+        http_response_code(401);
+        echo json_encode([
+            'success' => false,
+            'code'    => 'SESSION_EXPIRED',
+            'reason'  => $problem,
+            'message' => 'Your session has ended. Please log in again - your saved records are still on this device.',
+        ]);
+        exit;
+    }
+
+    if ($allowedRoles && !in_array($_SESSION['role'] ?? '', $allowedRoles, true)) {
+        http_response_code(403);
+        echo json_encode(['success' => false, 'code' => 'FORBIDDEN', 'message' => 'You do not have permission to do this.']);
+        exit;
+    }
+
+    $queuedBy = $_SERVER['HTTP_X_QUEUED_BY'] ?? '';
+    if ($queuedBy !== '' && (int) $queuedBy !== (int) $_SESSION['user_id']) {
+        http_response_code(409);
+        echo json_encode([
+            'success' => false,
+            'code'    => 'WRONG_USER',
+            'message' => 'These saved records belong to a different user. They will sync when that user logs in on this device.',
+        ]);
         exit;
     }
 
@@ -85,36 +220,68 @@ function currentUser(): array
     ];
 }
 
+/** The audit-log text for one failed attempt. The single source of truth: written by
+ *  recordFailedLogin(), counted by recentFailedLogins(). */
+function failedLoginDescription(string $username): string
+{
+    return "Failed login attempt for username '" . trim($username) . "'";
+}
+
+/**
+ * Failed attempts for this username inside the lockout window, counting only those after
+ * their last successful login. Counted from ActivityLogs - the server's own record - NOT
+ * from the visitor's session: a counter kept in the session is wiped by simply discarding
+ * the cookie, so the old lockout never stopped anyone. Times are compared using the
+ * DATABASE clock, because logActivity() stamps rows with CURRENT_TIMESTAMP (UTC on SQLite).
+ */
+function recentFailedLogins(string $username): int
+{
+    $db   = getDb();
+    $mins = (int) LOCKOUT_MINUTES;
+    $since = (string) (DB_DRIVER === 'mysql'
+        ? $db->query("SELECT DATE_FORMAT(DATE_SUB(NOW(), INTERVAL {$mins} MINUTE), '%Y-%m-%d %H:%i:%s')")->fetchColumn()
+        : $db->query("SELECT datetime('now', '-{$mins} minutes')")->fetchColumn());
+
+    $idStmt = $db->prepare('SELECT user_id FROM Users WHERE LOWER(username) = LOWER(:u)');
+    $idStmt->execute(['u' => trim($username)]);
+    $userId = $idStmt->fetchColumn();
+    if ($userId !== false) {
+        $okStmt = $db->prepare("SELECT MAX(date_time) FROM ActivityLogs WHERE user_id = :id AND action_description = 'Logged in'");
+        $okStmt->execute(['id' => $userId]);
+        $lastOk = $okStmt->fetchColumn();
+        if ($lastOk && (string) $lastOk > $since) {
+            $since = (string) $lastOk;   // a successful login resets the count
+        }
+    }
+
+    $cnt = $db->prepare(
+        'SELECT COUNT(*) FROM ActivityLogs
+          WHERE user_id IS NULL AND LOWER(action_description) = LOWER(:d) AND date_time > :since'
+    );
+    $cnt->execute(['d' => failedLoginDescription($username), 'since' => $since]);
+    return (int) $cnt->fetchColumn();
+}
+
 /** Returns true if this account is currently locked out. */
 function isAccountLocked(string $username): bool
 {
-    if (empty($_SESSION['login_attempts'][$username])) {
-        return false;
+    try {
+        return recentFailedLogins($username) >= MAX_FAILED_LOGINS;
+    } catch (Throwable $e) {
+        error_log('isAccountLocked(): ' . $e->getMessage());
+        return false;   // never lock everybody out because the log could not be read
     }
-    $attempt = $_SESSION['login_attempts'][$username];
-    if ($attempt['count'] >= MAX_FAILED_LOGINS) {
-        $unlockAt = $attempt['last_attempt'] + (LOCKOUT_MINUTES * 60);
-        if (time() < $unlockAt) {
-            return true;
-        }
-        // Lockout window has passed - reset the counter.
-        unset($_SESSION['login_attempts'][$username]);
-    }
-    return false;
 }
 
 function recordFailedLogin(string $username): void
 {
-    if (!isset($_SESSION['login_attempts'][$username])) {
-        $_SESSION['login_attempts'][$username] = ['count' => 0, 'last_attempt' => time()];
-    }
-    $_SESSION['login_attempts'][$username]['count']++;
-    $_SESSION['login_attempts'][$username]['last_attempt'] = time();
+    logActivity(null, failedLoginDescription($username));
 }
 
 function clearFailedLogins(string $username): void
 {
-    unset($_SESSION['login_attempts'][$username]);
+    // Nothing to delete: the successful login is itself written to ActivityLogs ('Logged in')
+    // and recentFailedLogins() only counts failures after it. The audit trail stays intact.
 }
 
 // ------------------------------------------------------------
@@ -178,7 +345,7 @@ function verifyCsrfHeader(): void
     if ($submitted === '' || $expected === '' || !hash_equals($expected, $submitted)) {
         http_response_code(403);
         header('Content-Type: application/json');
-        echo json_encode(['success' => false, 'message' => 'Request could not be verified. Please reload the page and try again.']);
+        echo json_encode(['success' => false, 'code' => 'CSRF', 'message' => 'Request could not be verified. Please reload the page and try again.']);
         exit;
     }
 }
@@ -289,6 +456,7 @@ const PAGE_ACCESS = [
     'backup.php'                       => ['Admin'],
     'error_log_viewer.php'             => ['Admin'],
     'sync/conflicts.php'               => ['Admin'],
+    'sync/status.php'                  => ['Admin'],
 
     // Reports — each role only sees its own side
     'reports/index.php'                => ['Admin', 'PoliceSupervisor', 'MeterSupervisor'],

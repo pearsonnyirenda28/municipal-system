@@ -6,21 +6,12 @@
  * fetch(), with an offline queue fallback - closing the gap flagged at
  * the end of Version 3.0 ("status buttons need a live connection").
  */
-require_once __DIR__ . '/../includes/db.php';
+require_once __DIR__ . '/../includes/local_store.php';
 require_once __DIR__ . '/../includes/auth.php';
 
 header('Content-Type: application/json');
 
-if (empty($_SESSION['user_id'])) {
-    http_response_code(401);
-    echo json_encode(['success' => false, 'message' => 'Not logged in.']);
-    exit;
-}
-if (!in_array($_SESSION['role'], ['Admin', 'MeterReader'], true)) {
-    http_response_code(403);
-    echo json_encode(['success' => false, 'message' => 'You do not have permission to do this.']);
-    exit;
-}
+requireApiLogin(['Admin', 'MeterReader']);   // 401 + code on an ended session, 403 on the wrong role, 409 on another user's records
 
 verifyCsrfHeader();
 
@@ -47,7 +38,24 @@ if (!$houseId || !in_array($status, $validStatuses, true)) {
 $db = getDb();
 
 try {
-    upsertHouseVisit($db, $houseId, (int) $_SESSION['user_id'], $visitDate, $status, null, $notes ?: null);
+    // Version 4.5: each status change is queued for the central
+    // Workspace Server under its own fresh sync_id (see
+    // includes/db.php::upsertHouseVisit - unlike readings/fines, this
+    // table's own idempotency already comes from the house+reader+date
+    // upsert, not a client-supplied token, so there's no clientRef to
+    // reuse here the way save_reading.php/save_fine.php do).
+    $syncId = generateSyncId();
+    $db->beginTransaction();
+    upsertHouseVisit($db, $houseId, (int) $_SESSION['user_id'], $visitDate, $status, null, $notes ?: null, $syncId, DEVICE_ID);
+    enqueueForCentralSync($db, $syncId, 'HouseVisits', 'UPSERT', [
+        'house_id'        => $houseId,
+        'reader_id'       => $_SESSION['user_id'],
+        'visit_date'      => $visitDate,
+        'status'          => $status,
+        'reading_sync_id' => null,
+        'notes'           => $notes ?: null,
+    ]);
+    $db->commit();
 
     $stmt = $db->prepare('SELECT house_number FROM Houses WHERE house_id = :id');
     $stmt->execute(['id' => $houseId]);
@@ -57,6 +65,9 @@ try {
 
     echo json_encode(['success' => true]);
 } catch (PDOException $e) {
+    if ($db->inTransaction()) {
+        $db->rollBack();
+    }
     error_log('mark_visit.php failed: ' . $e->getMessage());
     http_response_code(500);
     echo json_encode(['success' => false, 'message' => 'Could not save the status. Please try again.']);

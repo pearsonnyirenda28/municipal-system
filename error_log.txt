@@ -4,3 +4,5 @@ Stack trace:
 #1 {main}
   thrown in Command line code on line 9
 [2026-08-16 16:21:26] PDOException (uncaught): SQLSTATE[HY000]: General error: 1 no such table: Users in C:\xampp\htdocs\municipal-system\setup_admin.php on line 14
+[2026-10-05 09:35:56] Uncaught PDOException: SQLSTATE[HY000]: General error: 1 no such column: r.discarded_at in C:\xampp\htdocs\municipal-system\meter-readings\duplicates.php on line 125
+[2026-10-05 09:35:56] Stack trace: #0 C:\xampp\htdocs\municipal-system\meter-readings\duplicates.php(125): PDO->query('SELECT r.*, h.h...') | #1 {main}

@@ -1,3 +1,10 @@
+> **Status: not connected in this version.** `WS_PORT` is not defined anywhere, so
+> `php ws/server.php` stops immediately with "Undefined constant WS_PORT", and no
+> page loads `assets/js/notifications-ws.js` or renders the notification bell the
+> client script updates. Nothing below is active until that is wired up. The
+> server's session checks were hardened in Version 4.7 (it now ends a connection
+> when the session times out, the user logs out, or the account changes).
+
 # Real-time notifications (WebSocket server)
 
 The header notification bell (unpaid fines, abnormal readings, pending

@@ -4,16 +4,25 @@ This is the working system documented in Chapters 1-7: **login and
 role-based access, Police Cases, Fines (issue / pay / printable receipt),
 Meter Readings (capture, with offline support and automatic sync), Damaged
 Meter reports (with photo upload), User account management, and the four
-filterable Reports** from Chapter 4, Section 2.2.
+filterable Reports** from Chapter 4, Section 2.2. Version 4.5 adds a
+second sync layer on top: more than one physical workstation, each with
+its own local SQLite, consolidating into one central MySQL "Workspace
+Server" over the municipal LAN (see the Version 4.5 section and section 6
+below) - separate from, and in addition to, one device's browser staying
+usable through a temporary network drop (Version 3.5).
 
 The database is **SQLite by default** - a single file, no separate
 database server to install or configure. All settings (including the
 database driver, if you ever want to switch to MySQL) live in a `.env`
 file that is never uploaded to GitHub.
 
-> Built and reviewed by hand, but **not executed** in the environment this
-> was written in (no PHP available there to run it against). Please test
-> locally and let me know if anything needs fixing - that's the next step.
+> **Testing status (Version 4.7).** The sync layer, the session code and the
+> browser pages were exercised end to end: real headless Chrome (offline save,
+> reconnect, automatic sync, session expiry, shared-computer logins), real
+> Apache with the project's `.htaccess`, a real MariaDB Workspace Server, and a
+> real WebSocket client. Not covered: a second physical workstation, real LAN
+> conditions, Windows/XAMPP specifics (including `start_all_cli.bat`), and
+> Safari/Firefox. See the Version 4.7, 4.6 and 4.5 sections for details.
 
 ## Recent fixes and additions
 
@@ -188,6 +197,226 @@ Built on `version-3.5-offline-sync`, branched off `version-3.0-guided-field-oper
   If you had that URL bookmarked anywhere, it's gone.
 
 
+## Version 4.7 - Session and login security fixes
+
+Each problem below was first reproduced on v4.6, then fixed and re-tested.
+
+- **Fixed: the account lockout never locked anyone.** The failed-attempt
+  counter lived in the visitor's own session, so discarding the cookie reset
+  it. Failures are now counted from the server's audit log (`ActivityLogs`),
+  per username, since that user's last successful login, using the database
+  clock. Unknown usernames behave exactly like real ones, so the lockout
+  cannot be used to find out which accounts exist.
+- **Fixed: a database-level deactivated account could still log in and stay
+  logged in** (see "Known gaps" - the feature itself is unfinished). Login now
+  refuses it, and every open session re-reads its account every
+  `SESSION_REVALIDATE_SECONDS` (default 30), which also applies role changes.
+- **Fixed: changing or resetting a password did not end other sessions.**
+  Sessions carry a fingerprint of the password hash; when it stops matching,
+  they end. Changing your own password keeps the current session (with a new
+  ID) and ends the others.
+- **Fixed: the idle timeout was only enforced when a page loaded.** The JSON
+  endpoints (`api/save_reading.php`, `save_fine.php`, `mark_visit.php`) used
+  their own looser check. They now use `requireApiLogin()`, which applies the
+  same timeout and account rules and answers `401 {code: SESSION_EXPIRED}`.
+- **Fixed: an ended session stranded saved records.** A 401/403 counted as a
+  failed attempt for every queued record, and after `MAX_SYNC_RETRIES` passes
+  the push loop skipped them for good. An ended session now pauses the sync,
+  counts nothing against the records, and shows a "Log in again" bar. Records
+  already stranded this way are given another chance once per page load.
+- **Fixed: on a shared computer one user's saved records could be sent under
+  the next user's login** (the server stamps `issued_by` / `reader_id` from the
+  session). The queue now sends only the current user's records, and the server
+  refuses a mismatch (`409 WRONG_USER`) using the `X-Queued-By` header.
+- **Fixed: logout left every visited page readable offline.** Reaching the
+  login page now deletes the cached pages (`assets/js/auth-cleanup.js`); scripts,
+  styles and the unsent-records queue are kept.
+- **Hardened:** own cookie name `MUNICIPAL_SESSID` (the shared `PHPSESSID`
+  let other PHP apps on the same host overwrite each other's session data),
+  strict mode, cookies-only, `Secure` on HTTPS, `gc_maxlifetime` never below the
+  timeout, a new session ID and CSRF token at login, one bcrypt comparison even
+  for unknown usernames, and logout now expires the cookie.
+- **New `.env` settings:** `SESSION_TIMEOUT_MINUTES` (default 15; use `1` to
+  demonstrate the timeout) and `SESSION_REVALIDATE_SECONDS` (default 30).
+- **New: `start_all_cli.bat`** starts the sync engine (once, in its own
+  window), takes a backup, and can schedule the nightly one. Use `stop` to close
+  the engine and `schedule-backup` for the 02:00 task.
+
+Existing users are logged out once after upgrading (the cookie name changed).
+
+### Known gaps (found, not changed)
+
+- **Account deactivation is unfinished.** `users/toggle_active.php` exists, but
+  the user list has no button for it, `is_active` is missing from `schema.sql`
+  and `schema.mysql.sql`, and master-data sync does not carry it. The checks
+  above work on databases that have the column and are skipped, without errors,
+  on those that do not.
+- **`ws/` (WebSocket notifications) is not connected.** `WS_PORT` is defined
+  nowhere, so `ws/server.php` cannot start, and no page loads
+  `notifications-ws.js` or renders a notification bell. Its session checks were
+  hardened and tested with a test-only bootstrap, ready for when it is wired up.
+- Fine numbers are generated per workstation (see Version 4.6).
+
+## Version 4.6 - Fixes found by testing in a real browser and under Apache
+
+Version 4.5 had only ever been tested over PHP's built-in dev server and in
+Node. Neither enforces `.htaccess` or Content-Security-Policy, and neither
+runs the page scripts in a real browser, so these slipped through.
+
+- **Fixed: "CSRF errors" / `window.CSRF_TOKEN is not set`.** `.htaccess` sent a
+  second, narrower `Content-Security-Policy` (no `'unsafe-inline'`) on top of
+  the one PHP sends in `includes/db.php`. Browsers enforce the intersection of
+  every CSP header, so the inline `<script>` that hands the token to the sync
+  layer was blocked, and with it every inline `onchange`/`onclick` handler.
+  The `.htaccess` copy is removed: `includes/db.php` is the single policy.
+  As a second line of defence the token is also in a `<meta name="csrf-token">`
+  tag (`includes/header.php`) and `connectivity.js` reads it if the inline
+  script did not run.
+- **Fixed: `countPending is not defined` / `syncOfflineQueue is not defined`.**
+  `meter-reading.js`, `fine-issue.js` and `status-actions.js` ran before the
+  footer loaded `offline-db-sqlite.js`. They are now `defer`red, and the
+  reader dashboard's pending-count snippet waits for `DOMContentLoaded`.
+- **Fixed: the "pending" counter stayed at 1 after a background sync.**
+  `syncOfflineQueue()` now fires a `queuesynced` event the pages listen for.
+- **Fixed: one bad record blocked the whole sync.** `api/sync_push.php` put
+  the entire batch in one transaction, so a single constraint violation made
+  the server answer HTTP 500 for all of it; the workstation retried the same
+  batch forever and nothing behind the bad record synced. Each record is now
+  applied in its own transaction and reported individually (`synced`,
+  `already_synced`, or `error` with a message). The engine already parked
+  rejected records in `SYNC_ERROR` after `SYNC_MAX_ATTEMPTS`. Database-down
+  errors still return HTTP 500 so they simply retry.
+- **Changed: duplicate fine numbers across workstations.** Each workstation
+  numbers its own fines, so two can both issue `FINE-2026-0002`. Centrally the
+  number is UNIQUE, so the later one is stored as `FINE-2026-0002-xxxx`
+  (suffix derived from its `sync_id`) and the engine logs a WARN. The receipt
+  keeps the workstation's number. Giving each workstation its own number
+  prefix would remove the clash entirely (not done).
+- **Changed: service worker cache is now `municipal-shell-v3`** (purges the
+  stale `offline-queue.js` and old cached pages) and precaches the SQLite
+  engine and WASM files; the dead `assets/js/offline-queue.js` is deleted.
+
+### Upgrading an existing install to 4.6
+
+1. Copy this folder's files over your install. The package contains **no**
+   `.env`, database, backups or uploads, so yours are not overwritten.
+2. Open `setup_database.php` once (adds the sync columns/tables to an older
+   SQLite file; safe to run again).
+3. In the browser: DevTools, Application, Service Workers, **Unregister**,
+   then Clear site data, then reload. Do this once per device.
+4. Workstations: add `DEVICE_ID`, `CENTRAL_SERVER_URL` (base URL only, no
+   `/api/...`) and `SYNC_API_KEY` to `.env` (see `.env.example`).
+5. Workspace Server: select the **database first** in phpMyAdmin, then import
+   `schema.mysql.sql` (importing without a database selected fails with
+   `#1046 No database selected`).
+
+## Version 4.5 - Workstation-to-Central-MySQL Sync (complete)
+
+Version 3.5 (above) solved *one device losing its connection to this
+app's own server*. This version solves a different problem: **more than
+one physical workstation, each running this app against its own local
+SQLite, consolidating into one central MySQL "Workspace Server" over the
+municipal LAN** - local-first persistence, an idempotent background sync
+engine, and master data (Users/Wards/Houses/WardAssignments) flowing back
+down to every workstation.
+
+Some of this already existed as a start - `includes/local_store.php`,
+`cli_sync_engine.php`, `api/sync_push.php`, and the `DEVICE_ID` /
+`CENTRAL_SERVER_URL` settings in `config.php` - but it wrote into a
+second, separate SQLite file (`data/municipal_local.sqlite`) that nothing
+else in the app ever touched, so it never held real data, and the one
+page that displayed it wasn't linked from anywhere. This version finishes
+it into something real:
+
+- **One local database, not two.** `getLocalDb()` is now an explicit
+  alias for the same `getDb()` connection every other page already uses -
+  `sync_id` / `device_id` / `sync_status` / `synced_at` columns were added
+  directly to `MeterReadings`, `Fines`, and `HouseVisits` instead (safe,
+  additive `ALTER TABLE`s in `setup_database.php`, tested against an
+  existing database with real rows already in it).
+- **`api/save_reading.php`, `api/save_fine.php`, and `api/mark_visit.php`**
+  now queue a `LocalSyncQueue` row in the same transaction as their normal
+  insert/update, so a record can't exist locally without being queued for
+  the center, or be queued without existing.
+- **`cli_sync_engine.php`** is a real background worker now: it drains
+  that queue to `api/sync_push.php` on the Workspace Server (bounded
+  batches, exponential-in-spirit bounded retries, a row that keeps
+  getting rejected lands in `SYNC_ERROR` after `SYNC_MAX_ATTEMPTS` instead
+  of retrying forever), and separately pulls Users/Wards/Houses/
+  WardAssignments back down from the new **`api/sync_pull.php`** -
+  the "master data flows center-to-workstation, field data flows
+  workstation-to-center" split. It tracks its own status (`WORKSPACE_
+  UNAVAILABLE` / `ONLINE` / `SYNCING` / `SYNCHRONIZED` / `SYNC_ERROR`) in
+  a `SyncEngineState` row that **`sync/status.php`** (new, Admin-only)
+  displays, alongside anything stuck and needing attention.
+- **A real security gap closed**: `api/sync_push.php` had no
+  authentication at all before - anyone who could reach it on the LAN
+  could write directly into the central MySQL. Both it and the new
+  `api/sync_pull.php` now require a shared `X-Sync-Key` header
+  (`SYNC_API_KEY` in `.env`, the same value on every workstation and the
+  Workspace Server).
+- **`schema.mysql.sql` now defines all 11 tables**, not 2 - it only had
+  `Fines` and `MeterReadings`, so `migrate_to_mysql.php` (which already
+  expected all 11) would have failed on the other 9 the first time anyone
+  actually tried a full migration. `migrate_to_mysql.php`'s column lists
+  were updated to carry the new sync columns across too.
+- **The actual browser-side save flow is local-first now.**
+  `meter-reading.js`, `fine-issue.js`, and `status-actions.js` previously
+  tried the network *first* and only queued locally on failure or while
+  `navigator.onLine` was already false - a crash, a closed tab, or simply
+  a slow connection during that attempt could lose data that was never
+  written anywhere. They now write to the local queue first, unconditionally,
+  and only *then* attempt an opportunistic push - matching the durability
+  guarantee this version is built around (a successful save means safely
+  persisted on this device, not necessarily synced yet). One side effect:
+  whether a reading looks abnormally high, or a fine looks like a possible
+  duplicate, is server-side logic that compares against recent history, so
+  under local-first saving it's only knowable once the queued record
+  actually reaches the server - that warning now surfaces after sync
+  completes instead of at the moment of saving.
+- **A dead-code collision fixed**: `assets/js/offline-queue.js`
+  (IndexedDB) and `assets/js/offline-db-sqlite.js` (real SQLite via
+  WASM) defined the exact same global function names. Every
+  offline-capable page loaded both - `offline-db-sqlite.js` always loaded
+  second (via the global footer) and silently won, so `offline-queue.js`'s
+  own IndexedDB store was created but never actually used. The redundant
+  `<script>` tags were removed; `offline-db-sqlite.js` (loaded once,
+  globally) is now the one real implementation.
+
+**Deliberately out of scope this round** (same reasoning as Version 3.5
+leaving out Cases and Damaged Meters): Cases and Damaged Meters still
+don't participate in central sync - a `Fines.case_id` is never pushed to
+the Workspace Server as-is (it's a local autoincrement id that means
+nothing on a different database; see `api/save_fine.php`'s comment).
+Duplicate-resolution and payment updates made *after* a record has
+already synced don't currently re-sync - only the create-time write does.
+`api/sync_pull.php` pulls a full master-data snapshot every time rather
+than an incremental diff, which is simpler and fine at municipal scale but
+worth revisiting if that data ever grows large. See section 6 below for
+how to actually run more than one workstation against this.
+
+**How this was verified**: with no PHP available in the environment this
+was written in for Version 3.5, that release could only be reviewed by
+eye. This one was actually run - a seeded MySQL "Workspace Server" and a
+fresh SQLite "workstation" were both stood up for real, `cli_sync_engine.php`
+was run as an actual background process against both, and the full loop
+was exercised end-to-end: master data pulled down with exact IDs
+preserved, a login using only those pulled credentials (proving the app
+authenticates with zero connection to the center), a reading pushed back
+up with its linked visit correctly cross-referencing the reading's
+*central* id (not the workstation's local one), and - the actual point of
+the exercise - a reading recorded with the Workspace Server and sync
+engine both completely down, confirmed durably saved and queued rather
+than lost, then confirmed it synced automatically with no user action
+once the center came back. The browser-side queue (`offline-db-sqlite.js`)
+was separately exercised against the real shipped WASM binary and a
+spec-compliant in-memory IndexedDB, including a simulated page reload, to
+confirm the SQLite blob genuinely persists rather than just looking
+correct in isolation. What wasn't re-verified: the rest of the
+application (Cases, Payments, Houses/Wards CRUD, Reports) - untouched by
+this round of changes, and not re-tested here.
+
+
 ## 1. Requirements
 
 - XAMPP (or WAMP) with PHP 8.1+ - the bundled `pdo_sqlite` extension is
@@ -321,7 +550,88 @@ functions differ between SQLite and MySQL (e.g. "readings from the last
 for whichever `DB_DRIVER` is active, so the rest of the codebase - every
 page, every query - is identical regardless of which database is behind it.
 
-## 6. Secrets and .env
+## 6. Deploying more than one workstation
+
+Everything above (and everything in sections 1-5) works exactly the same
+for a single standalone install - `DEVICE_ID`, `CENTRAL_SERVER_URL`, and
+`SYNC_API_KEY` can all stay blank, and `cli_sync_engine.php` simply idles
+with nothing to sync to. This section is only relevant once you want
+**more than one** physical workstation (e.g. a ward office and a
+municipal HQ) consolidating into one central database.
+
+**Roles.** This is the same codebase running two ways:
+- **Field workstation(s)**: `DB_DRIVER=sqlite` (the default). Runs
+  everything normally; `cli_sync_engine.php` additionally runs in the
+  background.
+- **Workspace Server** (one, central): `DB_DRIVER=mysql`, schema imported
+  from `schema.mysql.sql`. Exposes `api/sync_push.php` / `api/sync_pull.php`
+  for workstations to call. Nobody needs to run `cli_sync_engine.php`
+  *here* - it's the destination, not a source.
+
+**Setup, in order:**
+1. Set up the Workspace Server first: a normal install with
+   `DB_DRIVER=mysql` (section 5 above covers importing `schema.mysql.sql`
+   and configuring `DB_HOST`/`DB_NAME`/`DB_USER`/`DB_PASS`). Create your
+   real Users, Wards, Houses, and WardAssignments **here** - a field
+   workstation should never create its own (see "Why master data only
+   goes one way" below).
+2. Generate a shared secret: `php -r "echo bin2hex(random_bytes(24));"`.
+   Set it as `SYNC_API_KEY` in `.env` on the Workspace Server **and**
+   every workstation - they must match exactly.
+3. On each field workstation's `.env`: give it a unique `DEVICE_ID`
+   (e.g. `WARD7-FRONTDESK`), and set `CENTRAL_SERVER_URL` to the
+   Workspace Server's base URL, no trailing path
+   (e.g. `http://192.168.1.10/municipal-system`).
+4. Run `cli_sync_engine.php` on each workstation as a **persistent
+   background process** - not something left running in a terminal
+   someone might close:
+   - **Windows (the likely case with XAMPP)**: use
+     [NSSM](https://nssm.cc/) to install it as a Windows service
+     (`nssm install MunicipalSync "C:\xampp\php\php.exe" "C:\xampp\htdocs\municipal-system\cli_sync_engine.php"`),
+     or a Task Scheduler task set to run at startup with "repeat every
+     1 minute" and "if already running, do nothing" as a poor man's
+     supervisor.
+   - **Linux**: a systemd unit -
+     ```ini
+     [Unit]
+     Description=Municipal System sync engine
+     After=network.target
+
+     [Service]
+     ExecStart=/usr/bin/php /path/to/municipal-system/cli_sync_engine.php
+     Restart=always
+     RestartSec=5
+     WorkingDirectory=/path/to/municipal-system
+
+     [Install]
+     WantedBy=multi-user.target
+     ```
+     then `systemctl enable --now municipal-sync`.
+5. Check `sync/status.php` (Admin-only) on the workstation - it shows the
+   engine's current state, what's pending, and anything stuck in
+   `SYNC_ERROR` that stopped retrying automatically.
+
+**Why master data only goes one way.** `api/sync_pull.php` writes each
+Users/Wards/Houses/WardAssignments row back with the **exact same
+primary key** it has centrally - that's what lets a `MeterReadings.house_id`
+mean the same house whether you're looking at it on a workstation or on
+the Workspace Server. That only holds if a house (or user, or ward) is
+always created **at the Workspace Server** and pulled down from there,
+never created independently at a field workstation with its own local
+autoincrement id. Field data - readings, fines, visit status - is the
+opposite: created at the workstation, pushed up.
+
+**A real trade-off worth knowing about**: `api/sync_pull.php` includes
+`password_hash` for every user, because a field workstation needs to
+authenticate a login locally even with zero connection to the Workspace
+Server (offline login is part of "the app works regardless of LAN
+availability"). This means every workstation's local SQLite file holds
+real password hashes for every account, not just the people who use that
+particular machine. Treat each workstation's disk accordingly (whole-disk
+encryption, physical access control) - this is inherent to a
+local-first-with-local-login design, not something a setting turns off.
+
+## 7. Secrets and .env
 
 Every setting that could vary between your machine and anyone else's -
 or that is genuinely sensitive, like a future SMS gateway key from Chapter
@@ -334,7 +644,7 @@ Only `.env.example` (with blank/placeholder values) is committed, so anyone
 who clones the repository knows what settings exist without ever seeing
 your real values.
 
-## 7. Putting this on GitHub
+## 8. Putting this on GitHub
 
 1. Create a new repository on GitHub (leave it empty - no README/license,
    since this project already has its own).
@@ -386,7 +696,7 @@ git push
 (Merging 3.5 before 3.0 would fail/conflict, since 3.5's history already
 contains 3.0's commits - merging 3.0 first, then 3.5, brings both in cleanly.)
 
-## 8. Folder structure
+## 9. Folder structure
 
 ```
 municipal-system/
@@ -394,26 +704,29 @@ municipal-system/
 ├── .gitignore
 ├── config.php                <- loads .env, defines constants
 ├── schema.sql                <- SQLite schema, run via setup_database.php
-├── schema.mysql.sql           <- MySQL schema, for production (Section 5)
+├── schema.mysql.sql           <- MySQL schema, for production (Section 5) / a Workspace Server (Section 6)
 ├── setup_database.php        <- creates the SQLite file, run once
 ├── setup_admin.php           <- run once, then delete
 ├── migrate_to_mysql.php       <- one-time SQLite -> MySQL data migration
+├── cli_sync_engine.php        <- background worker: workstation <-> central MySQL (Version 4.5, Section 6)
 ├── index.php
 ├── login.php / logout.php
 ├── dashboard.php
 ├── data/                      <- the SQLite database file lives here (gitignored)
 ├── includes/
 │   ├── db.php                 <- PDO connection (SQLite or MySQL) + logActivity() + date-SQL helpers
+│   ├── local_store.php         <- workstation-tier sync helpers: sync_id, LocalSyncQueue, engine state (Version 4.5)
+│   ├── central_store.php       <- Workspace-Server-tier helpers: MySQL connection, X-Sync-Key check (Version 4.5)
 │   ├── auth.php                <- session guard, roles, lockout, CSRF, password policy, security headers
 │   ├── pagination.php          <- shared pagination + search box helpers
 │   ├── header.php / footer.php
 ├── assets/
 │   ├── css/style.css
 │   └── js/
-│       ├── offline-queue.js    <- generalized IndexedDB sync queue (Version 3.5)
-│       ├── meter-reading.js    <- capture page logic
-│       ├── status-actions.js   <- Skip/Vacant/Locked/... buttons (Version 3.5)
-│       ├── fine-issue.js       <- offline-capable fine issuing (Version 3.5)
+│       ├── offline-db-sqlite.js <- the ONE active local queue: real SQLite via WASM (Version 4.0/4.5)
+│       ├── meter-reading.js    <- capture page logic, local-first (Version 4.5)
+│       ├── status-actions.js   <- Skip/Vacant/Locked/... buttons, local-first (Version 4.5)
+│       ├── fine-issue.js       <- offline-capable fine issuing, local-first (Version 4.5)
 │       └── nav.js               <- hamburger menu toggle
 ├── cases/
 │   ├── list.php / create.php / update_status.php
@@ -433,14 +746,17 @@ municipal-system/
 │   ├── index.php / cases.php / fines.php / readings.php / damage.php
 ├── sync/
 │   ├── conflicts.php           <- possible-duplicate review (Version 3.5)
+│   └── status.php              <- this workstation's sync status - pending, errors, engine state (Version 4.5)
 ├── uploads/damage_photos/     <- photo uploads land here (gitignored)
 └── api/
-    ├── save_reading.php        <- meter readings (Version 3.0)
-    ├── mark_visit.php          <- visit status marks (Version 3.5)
-    └── save_fine.php           <- fine issuing (Version 3.5)
+    ├── save_reading.php        <- meter readings, local-first (Version 3.0 / 4.5)
+    ├── mark_visit.php          <- visit status marks, local-first (Version 3.5 / 4.5)
+    ├── save_fine.php           <- fine issuing, local-first (Version 3.5 / 4.5)
+    ├── sync_push.php           <- Workspace Server: receives pushes from workstations (Version 4.5)
+    └── sync_pull.php           <- Workspace Server: serves master data to workstations (Version 4.5)
 ```
 
-## 9. What's built vs. what's still on the roadmap
+## 10. What's built vs. what's still on the roadmap
 
 **Working now:** everything listed in Section 3 above, plus account
 lockout, session timeout, and a full activity log of logins and data
@@ -455,18 +771,28 @@ changes (Chapter 4, Section 5.2).
   still only support create, list, and status/payment updates, not full
   edit-in-place.
 
-**Version 2.0, 2.5, 3.0, and 3.5 (mobile/security, ward-based operations,
-guided field operations, and offline synchronization) are all complete**
-- see the changelog at the top of this file for the full list, including
-what Version 3.5 deliberately left out (offline Cases, offline Damaged
-Meter reports with photos). **Not yet started:** Version 4.0's full
-installable PWA (a service worker so the app shell itself loads offline,
-not just the data on pages already visited), Version 4.5's
-progress/assignment tools beyond the current dashboard widget, and the
-enterprise-tier features from Version 5.0 (PDF/Excel export, analytics,
-a REST API, 2FA).
+**Version 2.0, 2.5, 3.0, 3.5, and 4.5 (mobile/security, ward-based
+operations, guided field operations, browser-tier offline sync, and
+workstation-to-central-MySQL sync) are all complete** - see the
+changelog at the top of this file for the full list, including what each
+deliberately left out (Version 3.5: offline Cases, offline Damaged Meter
+reports with photos; Version 4.5: those same two, plus re-syncing
+duplicate-resolution/payment updates made after a record already synced,
+plus incremental - rather than full-snapshot - master data pulls). **Not
+yet started:** Version 4.0's full installable PWA (a service worker so
+the app shell itself loads offline, not just the data on pages already
+visited), further progress/assignment tools beyond the current dashboard
+widget, and the enterprise-tier features from Version 5.0 (PDF/Excel
+export, analytics, a REST API, 2FA).
 
 **Found during this security pass, not yet fixed:**
+- `api/sync_push.php` and `api/sync_pull.php` (Version 4.5) are protected
+  by a shared `SYNC_API_KEY`, but it's a single static secret shared by
+  every workstation - if one workstation's `.env` leaks, every
+  workstation needs a new key, not just that one. Per-workstation
+  credentials (or mutual TLS, if this ever crosses an untrusted network)
+  would be the real fix; a single shared LAN-only secret was judged
+  proportionate for now.
 - `setup_database.php`, `setup_admin.php`, and `migrate_to_mysql.php` are
   all one-time tools not gated behind a login (they can't be, really -
   `setup_admin.php` in particular has to run *before* any account exists).

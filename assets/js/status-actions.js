@@ -37,30 +37,29 @@ if (statusButtonsWrap) {
     });
 }
 
+/**
+ * Version 4.5: local-first, same reasoning as meter-reading.js and
+ * fine-issue.js - queue on this device FIRST (that is what "saved"
+ * means from here), then try an opportunistic push only when
+ * connectivity.js's real reachability check says the server actually
+ * answers right now.
+ */
 async function saveVisitStatus(payload) {
     const alertBox = document.getElementById('formAlert');
     try {
-        if (navigator.onLine) {
-            const response = await fetch('/municipal-system/api/mark_visit.php', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': window.CSRF_TOKEN },
-                credentials: 'same-origin',
-                body: JSON.stringify(payload),
-            });
-            const result = await response.json();
-            if (!response.ok || !result.success) {
-                throw new Error(result.message || 'Server rejected the request');
-            }
-            if (alertBox) alertBox.innerHTML = `<div class="alert success">Status saved.</div>`;
-        } else {
-            await queueRecord('visitStatus', payload, window.CURRENT_USER_ID);
-            if (alertBox) alertBox.innerHTML = `<div class="alert warning">No connection - status saved on ` +
-                `this device and will sync automatically once you are back online.</div>`;
-        }
-    } catch (err) {
         await queueRecord('visitStatus', payload, window.CURRENT_USER_ID);
-        if (alertBox) alertBox.innerHTML = `<div class="alert warning">Could not reach the server - ` +
-            `status saved on this device instead. It will sync automatically.</div>`;
-        console.warn('Status save failed, queued offline instead:', err.message);
+    } catch (err) {
+        if (alertBox) alertBox.innerHTML = `<div class="alert error">Could not save this status on this ` +
+            `device (${err.message}). Please try again.</div>`;
+        console.error('Local save failed:', err);
+        return;
+    }
+
+    if (alertBox) alertBox.innerHTML = `<div class="alert success">Status saved on this device and queued to sync.</div>`;
+
+    const reachable = typeof window.getConnectivityStatus === 'function'
+        && window.getConnectivityStatus() === 'reachable';
+    if (reachable && typeof window.syncOfflineQueue === 'function') {
+        window.syncOfflineQueue(); // opportunistic - doesn't block navigation to the next house
     }
 }

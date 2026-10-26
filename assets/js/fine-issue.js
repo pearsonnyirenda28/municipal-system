@@ -51,10 +51,15 @@ async function refreshPendingCount() {
 }
 
 function updateFineOfflineBanner() {
-    offlineFineNotice.style.display = navigator.onLine ? 'none' : 'block';
+    const reachable = typeof window.getConnectivityStatus === 'function'
+        ? window.getConnectivityStatus() === 'reachable'
+        : navigator.onLine;
+    offlineFineNotice.style.display = reachable ? 'none' : 'block';
 }
 window.addEventListener('online', () => { updateFineOfflineBanner(); syncAllPending(); });
 window.addEventListener('offline', updateFineOfflineBanner);
+window.addEventListener('connectivitychange', updateFineOfflineBanner);
+window.addEventListener('queuesynced', () => { refreshPendingCount(); });
 
 if (fineForm) {
     fineForm.addEventListener('submit', async function (event) {
@@ -92,35 +97,38 @@ if (fineForm) {
     });
 }
 
+/**
+ * Version 4.5: local-first, same reasoning as meter-reading.js -
+ * queue on this device FIRST (that is what "saved" means from here),
+ * then try an opportunistic push only when connectivity.js's real
+ * reachability check says the server actually answers right now.
+ * Whether the server flags this as a possible duplicate is - like the
+ * meter-reading "abnormal" warning - only knowable once the queued
+ * record actually reaches it, so that surfaces from the sync result
+ * (reportDuplicateFines() below) rather than at save-time.
+ */
 async function saveFineRecord(payload) {
     try {
-        if (navigator.onLine) {
-            const response = await fetch('/municipal-system/api/save_fine.php', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': window.CSRF_TOKEN },
-                credentials: 'same-origin',
-                body: JSON.stringify(payload),
-            });
-            const result = await response.json();
-            if (!response.ok || !result.success) {
-                throw new Error(result.message || 'Server rejected the request');
-            }
-            showFineAlert(`Fine <strong>${result.fine_number}</strong> saved successfully.` +
-                (result.duplicate_flagged ? ' <em>(Flagged for admin review as a possible duplicate.)</em>' : ''),
-                'success');
-            fineForm.reset();
-        } else {
-            await queueRecord('fine', payload, window.CURRENT_USER_ID);
-            showFineAlert('No connection - this fine has been saved on this device and will sync ' +
-                          'automatically once you are back online.', 'warning');
-            fineForm.reset();
-        }
-    } catch (err) {
         await queueRecord('fine', payload, window.CURRENT_USER_ID);
-        showFineAlert(`Could not reach the server - the fine was saved on this device instead. ` +
-                      `It will sync automatically. (${err.message})`, 'warning');
-        fineForm.reset();
-        console.warn('Server save failed, queued offline instead:', err.message);
+    } catch (err) {
+        showFineAlert(`Could not save this fine on this device (${err.message}). Please try again.`, 'error');
+        console.error('Local save failed:', err);
+        return;
+    }
+
+    showFineAlert('Fine saved on this device and queued to sync.', 'success');
+    fineForm.reset();
+
+    const reachable = typeof window.getConnectivityStatus === 'function'
+        && window.getConnectivityStatus() === 'reachable';
+    if (reachable && typeof window.syncOfflineQueue === 'function') {
+        window.syncOfflineQueue().then(reportDuplicateFines); // opportunistic - doesn't block the UI
+    }
+}
+
+function reportDuplicateFines(result) {
+    if (result.duplicateFines && result.duplicateFines.length) {
+        showFineAlert(`<em>Flagged for admin review as a possible duplicate: ${result.duplicateFines.join(', ')}.</em>`, 'warning');
     }
 }
 
@@ -133,8 +141,11 @@ async function saveFineRecord(payload) {
  * connection.
  */
 async function syncAllPending() {
-    if (!navigator.onLine) {
-        showFineAlert('You are offline - nothing can be synced right now.', 'warning');
+    const reachable = typeof window.getConnectivityStatus === 'function'
+        ? window.getConnectivityStatus() === 'reachable'
+        : navigator.onLine;
+    if (!reachable) {
+        showFineAlert('The server is not reachable right now - nothing can be synced.', 'warning');
         return;
     }
 
@@ -147,6 +158,7 @@ async function syncAllPending() {
     try {
         const result = await syncOfflineQueue();
         await refreshPendingCount();
+        reportDuplicateFines(result);
 
         if (result.failed > 0) {
             showFineAlert(

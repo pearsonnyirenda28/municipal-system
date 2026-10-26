@@ -150,6 +150,9 @@ final class WebSocketServer
         // browser sending it).
         $sessionId = $this->extractSessionId($headers['cookie'] ?? '');
         [$userId, $role] = $sessionId ? $this->lookupSession($sessionId) : [null, null];
+        if ($userId && !$this->sessionIsStillValid($sessionId, $userId)) {
+            $userId = null;   // timed out or deactivated: treat as not logged in
+        }
 
         if (!$userId) {
             // No valid session - nothing to push. Close politely (4001
@@ -163,6 +166,7 @@ final class WebSocketServer
 
         $this->clients[$id]['userId'] = $userId;
         $this->clients[$id]['role'] = $role;
+        $this->clients[$id]['sessionId'] = $sessionId;
         // Force an immediate check on the next loop tick instead of
         // waiting a full POLL_INTERVAL after connecting.
         $this->clients[$id]['lastPoll'] = 0;
@@ -172,7 +176,7 @@ final class WebSocketServer
     {
         foreach (explode(';', $cookieHeader) as $pair) {
             [$name, $value] = array_pad(explode('=', trim($pair), 2), 2, '');
-            if ($name === session_name()) {
+            if ($name === (defined('SESSION_COOKIE_NAME') ? SESSION_COOKIE_NAME : session_name())) {
                 return $value !== '' ? $value : null;
             }
         }
@@ -211,6 +215,52 @@ final class WebSocketServer
         $role = $data['role'] ?? null;
 
         return [$userId !== null ? (int) $userId : null, $role !== null ? (string) $role : null];
+    }
+
+    /**
+     * Is this session still allowed to receive data? The handshake used to be the ONLY check,
+     * so a tab left open stayed connected - and kept receiving notifications - after its
+     * session idled out, after logout elsewhere, and after an administrator deactivated the
+     * account. Re-checked on every poll, using the same rules as includes/auth.php:
+     * the session file must still exist, must not have idled past SESSION_TIMEOUT_SECONDS,
+     * and the account must still be active with the same password it logged in with.
+     */
+    private function sessionIsStillValid(string $sessionId, int $userId): bool
+    {
+        $path = session_save_path() . '/sess_' . basename($sessionId);
+        if (!is_file($path)) {
+            return false;                       // logged out, or the session was cleaned up
+        }
+        $data = $this->parsePhpSessionFile((string) file_get_contents($path));
+        if ((int) ($data['user_id'] ?? 0) !== $userId) {
+            return false;
+        }
+        $last = (int) ($data['last_activity'] ?? 0);
+        if ($last > 0 && (time() - $last) > SESSION_TIMEOUT_SECONDS) {
+            return false;                       // idle timeout (WebSocket traffic is not user activity)
+        }
+        try {
+            try {
+                $stmt = getDb()->prepare('SELECT is_active, password_hash FROM Users WHERE user_id = :id');
+                $stmt->execute(['id' => $userId]);
+                $u = $stmt->fetch();
+            } catch (Throwable $noColumn) {      // is_active is optional - see sessionProblem() in includes/auth.php
+                $stmt = getDb()->prepare('SELECT password_hash FROM Users WHERE user_id = :id');
+                $stmt->execute(['id' => $userId]);
+                $u = $stmt->fetch();
+                if ($u) { $u['is_active'] = null; }
+            }
+        } catch (Throwable $e) {
+            return true;                        // cannot tell - do not cut everyone off over a database hiccup
+        }
+        if (!$u || ($u['is_active'] !== null && (int) $u['is_active'] === 0)) {
+            return false;
+        }
+        if (!empty($data['pw_fingerprint'])
+            && !hash_equals((string) $data['pw_fingerprint'], hash('sha256', (string) $u['password_hash']))) {
+            return false;                       // password changed or reset since this session logged in
+        }
+        return true;
     }
 
     private function parsePhpSessionFile(string $raw): array
@@ -381,6 +431,13 @@ final class WebSocketServer
             }
 
             $db ??= getDb(); // lazy-open, and reused for every client this tick
+
+            if (!$this->sessionIsStillValid((string) ($client['sessionId'] ?? ''), (int) $client['userId'])) {
+                $this->sendFrame($client['socket'], json_encode(['type' => 'auth_error', 'message' => 'Your session has ended.']));
+                $this->sendClose($client['socket'], 4001, 'session ended');
+                $this->disconnect($id);
+                continue;
+            }
 
             try {
                 $items = getNotifications($db, ['id' => $client['userId'], 'role' => $client['role']]);

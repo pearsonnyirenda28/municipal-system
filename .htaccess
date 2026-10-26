@@ -29,12 +29,13 @@ Options -Indexes
     Header set X-Frame-Options "SAMEORIGIN"
     Header set Referrer-Policy "strict-origin-when-cross-origin"
 
-    # Strip any CSP that a parent scope might be setting, then install
-    # ours with WebAssembly permission so sql.js can compile SQLite.
-    # 'wasm-unsafe-eval' only allows WASM; it does NOT re-enable
-    # inline JS, eval(), or third-party scripts.
-    Header always unset Content-Security-Policy
-    Header always set Content-Security-Policy "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self'; frame-ancestors 'self'; base-uri 'self'; form-action 'self'; manifest-src 'self'; worker-src 'self'"
+    # NOTE: do NOT set a Content-Security-Policy here.
+    # The one authoritative policy is sent by PHP in includes/db.php. Browsers
+    # enforce the INTERSECTION of every CSP header on a response, so a second,
+    # narrower policy here (without 'unsafe-inline') silently blocks the inline
+    # <script> blocks that hand the CSRF token to the sync layer, and every
+    # inline onclick/onchange handler - which showed up as "window.CSRF_TOKEN
+    # is not set" and failed syncs.
 </IfModule>
 
 # ------------------------------------------------------------

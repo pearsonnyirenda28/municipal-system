@@ -88,8 +88,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $passwordErrors = array_merge($passwordErrors, passwordPolicyErrors($new, $account['username'], $account['full_name']));
 
         if (!$passwordErrors) {
+            $newHash = password_hash($new, PASSWORD_BCRYPT);
             $db->prepare('UPDATE Users SET password_hash = :p WHERE user_id = :id')
-               ->execute(['p' => password_hash($new, PASSWORD_BCRYPT), 'id' => $userId]);
+               ->execute(['p' => $newHash, 'id' => $userId]);
+            // This session stays signed in; every OTHER open session of this account now fails the
+            // fingerprint check in sessionProblem() and is logged out.
+            $_SESSION['pw_fingerprint'] = sessionFingerprint($newHash);
+            session_regenerate_id(true);
             logActivity($userId, 'Changed own password');
             $passwordSuccess = true;
         }

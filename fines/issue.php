@@ -190,7 +190,7 @@ require __DIR__ . '/../includes/header.php';
 window.CURRENT_USER_ID = <?= (int) currentUser()['id'] ?>;
 window.CSRF_TOKEN = <?= json_encode(csrfToken()) ?>;
 </script>
-<script src="/municipal-system/assets/js/offline-queue.js"></script>
-<script src="/municipal-system/assets/js/fine-issue.js"></script>
+<!-- defer: must run AFTER the footer loads offline-db-sqlite.js (queueRecord, syncOfflineQueue) -->
+<script defer src="/municipal-system/assets/js/fine-issue.js"></script>
 
 <?php require __DIR__ . '/../includes/footer.php'; ?>

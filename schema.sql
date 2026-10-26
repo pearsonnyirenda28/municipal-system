@@ -71,6 +71,10 @@ CREATE TABLE IF NOT EXISTS Fines (
     discarded_at             TEXT NULL,
     discarded_by             INTEGER NULL,
     discard_reason           TEXT NULL,
+    sync_id                  TEXT NULL UNIQUE,
+    device_id                TEXT NULL,
+    sync_status               TEXT NOT NULL DEFAULT 'SYNCED' CHECK (sync_status IN ('PENDING','SYNCING','SYNCED','SYNC_ERROR')),
+    synced_at                TEXT NULL,
     FOREIGN KEY (case_id) REFERENCES Cases(case_id) ON DELETE SET NULL,
     FOREIGN KEY (issued_by) REFERENCES Users(user_id) ON DELETE SET NULL,
     FOREIGN KEY (duplicate_resolved_by) REFERENCES Users(user_id) ON DELETE SET NULL,
@@ -129,13 +133,21 @@ CREATE TABLE IF NOT EXISTS Houses (
 
 -- ------------------------------------------------------------
 -- MeterReadings
+--
+-- sync_id / device_id / sync_status / synced_at (Version 4.5): the
+-- workstation -> central-MySQL resilience layer. client_ref is this
+-- row's idempotency key against THIS workstation's own web server
+-- (set by the browser's offline queue); sync_id is the idempotency
+-- key this same row is pushed to the central Workspace Server under
+-- (set server-side, defaulting to client_ref when the browser already
+-- supplied one). See includes/local_store.php.
 -- ------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS MeterReadings (
     reading_id                INTEGER PRIMARY KEY AUTOINCREMENT,
     house_id                  INTEGER NOT NULL,
     previous_reading          NUMERIC NOT NULL,
     current_reading           NUMERIC NOT NULL,
-    consumption               NUMERIC NOT NULL,
+    consumption                NUMERIC NOT NULL,
     is_abnormal               INTEGER NOT NULL DEFAULT 0,
     reader_id                 INTEGER NULL,
     date_taken                TEXT NOT NULL,
@@ -146,6 +158,10 @@ CREATE TABLE IF NOT EXISTS MeterReadings (
     discarded_at              TEXT NULL,
     discarded_by              INTEGER NULL,
     discard_reason            TEXT NULL,
+    sync_id                   TEXT NULL UNIQUE,
+    device_id                 TEXT NULL,
+    sync_status                TEXT NOT NULL DEFAULT 'SYNCED' CHECK (sync_status IN ('PENDING','SYNCING','SYNCED','SYNC_ERROR')),
+    synced_at                 TEXT NULL,
     FOREIGN KEY (house_id) REFERENCES Houses(house_id) ON DELETE CASCADE,
     FOREIGN KEY (reader_id) REFERENCES Users(user_id) ON DELETE SET NULL,
     FOREIGN KEY (duplicate_resolved_by) REFERENCES Users(user_id) ON DELETE SET NULL,
@@ -184,11 +200,72 @@ CREATE TABLE IF NOT EXISTS HouseVisits (
     reading_id   INTEGER NULL,
     notes        TEXT NULL,
     updated_at   TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    sync_id      TEXT NULL UNIQUE,
+    device_id    TEXT NULL,
+    sync_status   TEXT NOT NULL DEFAULT 'SYNCED' CHECK (sync_status IN ('PENDING','SYNCING','SYNCED','SYNC_ERROR')),
+    synced_at    TEXT NULL,
     FOREIGN KEY (house_id) REFERENCES Houses(house_id) ON DELETE CASCADE,
     FOREIGN KEY (reader_id) REFERENCES Users(user_id) ON DELETE CASCADE,
     FOREIGN KEY (reading_id) REFERENCES MeterReadings(reading_id) ON DELETE SET NULL,
     UNIQUE (house_id, reader_id, visit_date)
 );
+
+-- ------------------------------------------------------------
+-- LocalSyncQueue (Version 4.5)
+--
+-- The workstation's outbox. Every locally-committed transaction that
+-- needs to reach the central Workspace Server's MySQL gets one row
+-- here, written in the SAME database transaction as the business-table
+-- insert/update (see includes/local_store.php::enqueueForCentralSync).
+-- cli_sync_engine.php polls this table and drains it over the LAN.
+--
+-- operation: 'INSERT' for append-only tables (MeterReadings, Fines -
+-- once written, never changed by this app), 'UPSERT' for mutable ones
+-- (HouseVisits - the same visit row is updated in place as a reader's
+-- day progresses). api/sync_push.php applies the two differently on
+-- the central side.
+--
+-- status: PENDING (waiting) -> SYNCING (a push attempt is in flight -
+-- lets a crashed engine tell "was mid-send" apart from "never tried")
+-- -> SYNCED, or back to PENDING with attempts+1 and error_message set
+-- on failure. After MAX attempts (cli_sync_engine.php) it is left in
+-- SYNC_ERROR instead of retried forever - visible on sync/status.php,
+-- not silently stuck.
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS LocalSyncQueue (
+    queue_id       INTEGER PRIMARY KEY AUTOINCREMENT,
+    sync_id        TEXT NOT NULL UNIQUE,
+    table_name     TEXT NOT NULL,
+    operation      TEXT NOT NULL DEFAULT 'INSERT' CHECK (operation IN ('INSERT','UPSERT')),
+    payload        TEXT NOT NULL,
+    status         TEXT NOT NULL DEFAULT 'PENDING' CHECK (status IN ('PENDING','SYNCING','SYNCED','SYNC_ERROR')),
+    attempts       INTEGER NOT NULL DEFAULT 0,
+    error_message  TEXT NULL,
+    created_at     TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at     TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_syncqueue_status ON LocalSyncQueue(status);
+
+-- ------------------------------------------------------------
+-- SyncEngineState (Version 4.5)
+--
+-- Single-row status record cli_sync_engine.php keeps up to date as it
+-- runs, so sync/status.php (or anything else) can show the current
+-- ONLINE / WORKSPACE_UNAVAILABLE / SYNCING / SYNCHRONIZED / SYNC_ERROR
+-- state without shelling out to the running process. See
+-- includes/local_store.php::setSyncEngineState().
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS SyncEngineState (
+    id                     INTEGER PRIMARY KEY CHECK (id = 1),
+    state                  TEXT NOT NULL DEFAULT 'WORKSPACE_UNAVAILABLE',
+    last_push_attempt_at   TEXT NULL,
+    last_push_success_at   TEXT NULL,
+    last_pull_attempt_at   TEXT NULL,
+    last_pull_success_at   TEXT NULL,
+    last_error             TEXT NULL,
+    updated_at             TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+INSERT OR IGNORE INTO SyncEngineState (id, state) VALUES (1, 'WORKSPACE_UNAVAILABLE');
 
 -- ------------------------------------------------------------
 -- ActivityLogs
@@ -217,6 +294,11 @@ SELECT '087', 'Dulivhadzimu Street', ward_id, 'S. Ncube', 'MTR-0087', '87 Dulivh
 UNION ALL
 SELECT '215', 'North Road', ward_id, 'P. Dube', 'MTR-0215', '215 Beitbridge North' FROM Wards WHERE ward_name = 'Ward 3';
 
+-- date_taken uses a fixed date, not CURRENT_DATE - the UNIQUE constraint
+-- this OR IGNORE relies on includes date_taken, so a value that changes
+-- with the day this file happens to run would defeat the "IGNORE" part
+-- of "INSERT OR IGNORE" entirely: every fresh day would insert a whole
+-- new set of "seed" rows alongside the previous day's, forever.
 INSERT OR IGNORE INTO MeterReadings (house_id, previous_reading, current_reading, consumption, is_abnormal, reader_id, date_taken, client_ref)
-SELECT house_id, 1240.00, 1240.00, 0, 0, NULL, CURRENT_DATE, 'seed-' || house_id
+SELECT house_id, 1240.00, 1240.00, 0, 0, NULL, '2026-08-16', 'seed-' || house_id
 FROM Houses;

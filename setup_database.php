@@ -39,6 +39,7 @@ if (DB_DRIVER !== 'sqlite') {
         migrateFinesClientRef($pdo);
         migrateDuplicateTrackingColumns($pdo);
         migrateDiscardColumns($pdo);
+        migrateSyncColumns($pdo);
 
         $success = true;
     } catch (Throwable $e) {
@@ -125,6 +126,49 @@ function migrateDiscardColumns(PDO $pdo): void
         if (!in_array('discard_reason', $columns, true)) {
             $pdo->exec("ALTER TABLE {$table} ADD COLUMN discard_reason TEXT NULL");
         }
+    }
+}
+
+/**
+ * Version 4.5 migration: adds the workstation -> central-MySQL sync
+ * columns (sync_id, device_id, sync_status, synced_at) to the three
+ * tables that are local-first today. Existing rows are backfilled as
+ * sync_status = 'SYNCED' (nothing to push - they predate this layer
+ * and were never queued), not 'PENDING', so an upgraded install
+ * doesn't suddenly claim thousands of old rows are waiting to sync
+ * when no matching LocalSyncQueue entry exists for any of them.
+ * New tables (LocalSyncQueue, SyncEngineState) are created by the
+ * CREATE TABLE IF NOT EXISTS statements in schema.sql above and need
+ * no migration step of their own. Safe to re-run.
+ */
+function migrateSyncColumns(PDO $pdo): void
+{
+    foreach (['MeterReadings', 'Fines', 'HouseVisits'] as $table) {
+        $columns = array_column($pdo->query("PRAGMA table_info({$table})")->fetchAll(), 'name');
+
+        if (!in_array('sync_id', $columns, true)) {
+            $pdo->exec("ALTER TABLE {$table} ADD COLUMN sync_id TEXT NULL");
+        }
+        if (!in_array('device_id', $columns, true)) {
+            $pdo->exec("ALTER TABLE {$table} ADD COLUMN device_id TEXT NULL");
+        }
+        if (!in_array('sync_status', $columns, true)) {
+            $pdo->exec("ALTER TABLE {$table} ADD COLUMN sync_status TEXT NOT NULL DEFAULT 'SYNCED'");
+        }
+        if (!in_array('synced_at', $columns, true)) {
+            $pdo->exec("ALTER TABLE {$table} ADD COLUMN synced_at TEXT NULL");
+        }
+    }
+
+    // sync_id has a UNIQUE constraint in a fresh install (schema.sql),
+    // but SQLite's ALTER TABLE ADD COLUMN can't add one to an existing
+    // table - a unique index accomplishes the same thing for an
+    // upgraded install. Every existing row's sync_id is NULL at this
+    // point (just added above), and SQLite treats multiple NULLs as
+    // distinct for UNIQUE/indexes, so this is safe to create even
+    // before any row has a real value.
+    foreach (['MeterReadings', 'Fines', 'HouseVisits'] as $table) {
+        $pdo->exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_{$table}_sync_id ON {$table}(sync_id)");
     }
 }
 

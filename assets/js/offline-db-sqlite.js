@@ -188,13 +188,30 @@ async function getUnsyncedRecords(type = null) {
     return rows;
 }
 
+// The id of whoever is logged in on this page (set from the page's own <meta> tag by
+// connectivity.js, or inline by the page itself).
+function currentUserId() {
+    const id = Number(window.CURRENT_USER_ID);
+    return Number.isFinite(id) && id > 0 ? id : null;
+}
+
+// Records saved by SOMEONE ELSE on this shared device. They stay in the queue, untouched,
+// and are sent when that person logs in - never attributed to whoever is logged in now.
+function belongsToOtherUser(record) {
+    const me = currentUserId();
+    return me !== null && record.userId != null && Number(record.userId) !== me;
+}
+
+// Counts the records that will be sent for the CURRENT user.
 async function countPending(type = null) {
     const db = await getDb();
-    const sql = type
-        ? 'SELECT COUNT(*) AS n FROM queue WHERE synced = 0 AND type = ?'
-        : 'SELECT COUNT(*) AS n FROM queue WHERE synced = 0';
+    const me = currentUserId();
+    let sql = 'SELECT COUNT(*) AS n FROM queue WHERE synced = 0';
+    const params = [];
+    if (type) { sql += ' AND type = ?'; params.push(type); }
+    if (me !== null) { sql += ' AND (user_id IS NULL OR user_id = ?)'; params.push(me); }
     const stmt = db.prepare(sql);
-    stmt.bind(type ? [type] : []);
+    stmt.bind(params);
     stmt.step();
     const n = stmt.getAsObject().n;
     stmt.free();
@@ -225,31 +242,106 @@ const SYNC_ENDPOINTS = {
 
 const MAX_SYNC_RETRIES = 5;
 
+/**
+ * Drains every queued record to its endpoint. Version 4.5: checks the
+ * real reachability status from connectivity.js (a periodic ping of
+ * THIS server, see assets/js/connectivity.js) rather than
+ * navigator.onLine, which only reports whether the device has *some*
+ * network interface up - true on a captive portal or a LAN whose
+ * Apache/MySQL is down, both cases where this fetch would just hang
+ * or fail anyway. abnormalReadings collects any reading the server
+ * flags as unusually high so callers can surface it - that check only
+ * happens server-side (it compares against this house's recent
+ * average), so under local-first saving it's necessarily known after
+ * the fact, once the record actually reaches the server, not at the
+ * moment it's queued.
+ */
+// Announces every finished sync pass so pages can refresh their "pending" counters,
+// whoever started the sync (a page button, or connectivity.js on reconnect).
 async function syncOfflineQueue() {
-    if (!navigator.onLine) return { synced: 0, failed: 0 };
+    const result = await _syncOfflineQueueInner();
+    try { window.dispatchEvent(new CustomEvent('queuesynced', { detail: result })); } catch (e) { /* non-fatal */ }
+    return result;
+}
+
+// Earlier versions counted a 401/403 caused by an ENDED SESSION as an ordinary failed
+// attempt for every pending record, so after MAX_SYNC_RETRIES passes the push loop skipped
+// them for good. Give those records another chance, once per page load.
+let _rescuedAuthStranded = false;
+async function rescueAuthStrandedRecords() {
+    if (_rescuedAuthStranded) return;
+    _rescuedAuthStranded = true;
+    const db = await getDb();
+    db.run(
+        `UPDATE queue SET retry_count = 0, last_error = NULL
+          WHERE synced = 0 AND retry_count > 0
+            AND (last_error LIKE '%Not logged in%' OR last_error LIKE '%could not be verified%'
+              OR last_error LIKE '%session has ended%' OR last_error LIKE '%Server returned 401%'
+              OR last_error LIKE '%Server returned 403%' OR last_error LIKE '%Unexpected token%'
+              OR last_error LIKE '%is not valid JSON%')`
+    );
+    persist(db);
+}
+
+async function _syncOfflineQueueInner() {
+    const reachable = typeof window.getConnectivityStatus === 'function'
+        ? window.getConnectivityStatus() === 'reachable'
+        : navigator.onLine;
+    if (!reachable) return { synced: 0, failed: 0, abnormalReadings: [], duplicateFines: [], sessionExpired: false, otherUsers: 0 };
+
+    await rescueAuthStrandedRecords();
 
     const pending = await getUnsyncedRecords();
-    let synced = 0, failed = 0;
+    let synced = 0, failed = 0, otherUsers = 0, sessionExpired = false;
+    const abnormalReadings = [];
+    const duplicateFines = [];
 
     for (const record of pending) {
+        if (belongsToOtherUser(record)) { otherUsers++; continue; }
         if (record.retryCount >= MAX_SYNC_RETRIES) { failed++; continue; }
         const endpoint = SYNC_ENDPOINTS[record.type];
         if (!endpoint) continue;
 
         try {
+            const headers = {
+                'Content-Type': 'application/json',
+                'X-CSRF-Token': window.CSRF_TOKEN,
+            };
+            // Who saved this record on the device - the server refuses it if that is not
+            // the user now logged in (shared computers).
+            if (record.userId != null) headers['X-Queued-By'] = String(record.userId);
+
             const response = await fetch(endpoint, {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-CSRF-Token': window.CSRF_TOKEN,
-                },
+                headers,
                 credentials: 'same-origin',
                 body: JSON.stringify(record.payload),
             });
-            const result = await response.json();
+            let result = null;
+            try { result = await response.json(); } catch (e) { /* not JSON - handled below */ }
+            const code = result && result.code;
+
+            // An ENDED SESSION (idle timeout, deactivated account, changed password) is not
+            // this record's fault. Stop the pass, count no failed attempt, keep every record,
+            // and let the page tell the user to log in again.
+            if (response.status === 401 || code === 'SESSION_EXPIRED' || code === 'CSRF'
+                || (response.redirected && /login\.php/.test(response.url))) {
+                sessionExpired = true;
+                break;
+            }
+            // Someone else's record on a shared device: leave it queued for them.
+            if (response.status === 409 && code === 'WRONG_USER') { otherUsers++; continue; }
+            if (result === null) throw new Error(`Server returned ${response.status} (not JSON)`);
+
             if (response.ok && result.success) {
                 await markQueueSynced(record.clientRef);
                 synced++;
+                if (record.type === 'reading' && result.abnormal) {
+                    abnormalReadings.push(record.payload.houseNumber || record.payload.houseId);
+                }
+                if (record.type === 'fine' && result.duplicate_flagged) {
+                    duplicateFines.push(result.fine_number || record.payload.offenderName);
+                }
             } else {
                 await recordSyncFailure(record.clientRef,
                     result.message || `Server returned ${response.status}`);
@@ -261,5 +353,5 @@ async function syncOfflineQueue() {
             break;
         }
     }
-    return { synced, failed };
+    return { synced, failed, abnormalReadings, duplicateFines, sessionExpired, otherUsers };
 }

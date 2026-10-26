@@ -270,17 +270,21 @@ require __DIR__ . '/includes/header.php';
 </div>
 
 <?php if ($readerWorkload !== null): ?>
-<script src="/municipal-system/assets/js/offline-queue.js"></script>
 <script>
-// Reuses the same IndexedDB queue the guided navigator writes to (any
-// type - readings, visit-status marks) - this is genuinely what's still
-// sitting on this device, not a server-side guess.
-if (typeof countPending === 'function') {
+// Reuses the same local SQLite-backed queue (assets/js/offline-db-sqlite.js,
+// loaded globally by includes/footer.php) every offline-capable save writes
+// to - this is genuinely what's still sitting on this device, not a
+// server-side guess.
+// Wait for DOMContentLoaded: the footer scripts that define countPending() load after this block.
+function refreshUnsyncedCount() {
+    if (typeof countPending !== 'function') return;
     countPending().then(function (count) {
         var el = document.getElementById('unsyncedCount');
         if (el) el.textContent = count;
     });
 }
+document.addEventListener('DOMContentLoaded', refreshUnsyncedCount);
+window.addEventListener('queuesynced', refreshUnsyncedCount);
 </script>
 <?php endif; ?>
 

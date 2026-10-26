@@ -42,10 +42,15 @@ async function refreshPendingCount() {
 }
 
 function updateOfflineBanner() {
-    offlineNotice.style.display = navigator.onLine ? 'none' : 'block';
+    const reachable = typeof window.getConnectivityStatus === 'function'
+        ? window.getConnectivityStatus() === 'reachable'
+        : navigator.onLine;
+    offlineNotice.style.display = reachable ? 'none' : 'block';
 }
 window.addEventListener('online', () => { updateOfflineBanner(); doSync(); });
 window.addEventListener('offline', updateOfflineBanner);
+window.addEventListener('connectivitychange', updateOfflineBanner);
+window.addEventListener('queuesynced', () => { refreshPendingCount(); });
 
 if (btnSave) {
     btnSave.addEventListener('click', async function () {
@@ -94,33 +99,51 @@ if (btnSave) {
     });
 }
 
-/** Try the server first, fall back to the offline queue on any failure. */
+/**
+ * Version 4.5: local-first. Every reading is committed to this
+ * device's local store FIRST, synchronously with the save action -
+ * that IS "saved" from here on (the durability guarantee: a
+ * successful save means safely persisted on this device, not
+ * necessarily synced yet). Only once that has succeeded does this try
+ * an opportunistic push, and only when connectivity.js's own
+ * reachability check says the server actually answers right now - not
+ * navigator.onLine, which just means some network interface is up.
+ * Previously this tried the network FIRST and only queued locally on
+ * failure or while navigator.onLine was already false - a crash, a
+ * closed tab, or simply a slow connection during that network attempt
+ * could lose a reading that was never durably written anywhere.
+ * Because of this, whether a reading looks abnormally high is no
+ * longer something this function can report immediately - that check
+ * compares against this house's recent average and only happens
+ * server-side, once the queued record actually reaches it (see
+ * doSync() below, which is where that warning now surfaces).
+ */
 async function saveReading(payload) {
     try {
-        if (navigator.onLine) {
-            const response = await fetch('/municipal-system/api/save_reading.php', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': window.CSRF_TOKEN },
-                credentials: 'same-origin',
-                body: JSON.stringify(payload),
-            });
-            const result = await response.json();
-            if (!response.ok || !result.success) {
-                throw new Error(result.message || 'Server rejected the request');
-            }
-            showAlert(`Reading for house ${payload.houseNumber} saved successfully.` +
-                (result.abnormal ? ' <strong>Warning: this reading looks unusually high.</strong>' : ''),
-                result.abnormal ? 'warning' : 'success');
-        } else {
-            await queueRecord('reading', payload, window.CURRENT_USER_ID);
-            showAlert(`No connection - reading for house ${payload.houseNumber} saved on this device ` +
-                      `and will sync automatically once you are back online.`, 'warning');
-        }
-    } catch (err) {
         await queueRecord('reading', payload, window.CURRENT_USER_ID);
-        showAlert(`Could not reach the server - reading for house ${payload.houseNumber} saved on this ` +
-                  `device instead. It will sync automatically. (${err.message})`, 'warning');
-        console.warn('Server save failed, queued offline instead:', err.message);
+    } catch (err) {
+        // The local store itself failed (IndexedDB unavailable, private
+        // browsing, storage full, ...) - there is nowhere left to fall
+        // back to, so this reading genuinely was not saved.
+        showAlert(`Could not save this reading on this device (${err.message}). Please try again.`, 'error');
+        console.error('Local save failed:', err);
+        return;
+    }
+
+    showAlert(`Reading for house ${payload.houseNumber} saved on this device and queued to sync.`, 'success');
+
+    const reachable = typeof window.getConnectivityStatus === 'function'
+        && window.getConnectivityStatus() === 'reachable';
+    if (reachable && typeof window.syncOfflineQueue === 'function') {
+        window.syncOfflineQueue().then(reportAbnormalReadings); // opportunistic - doesn't block the UI
+    }
+}
+
+/** Shared by the opportunistic sync in saveReading() and the explicit Sync Now button below - just the abnormal-reading warning, since each caller already has its own synced/failed messaging. */
+function reportAbnormalReadings(result) {
+    if (result.abnormalReadings && result.abnormalReadings.length) {
+        showAlert(`<strong>Warning:</strong> reading(s) for house ${result.abnormalReadings.join(', ')} ` +
+                  `looked unusually high compared to recent consumption.`, 'warning');
     }
 }
 
@@ -131,8 +154,11 @@ async function saveReading(payload) {
  * connection.
  */
 async function doSync() {
-    if (!navigator.onLine) {
-        showAlert('You are offline - nothing can be synced right now.', 'warning');
+    const reachable = typeof window.getConnectivityStatus === 'function'
+        ? window.getConnectivityStatus() === 'reachable'
+        : navigator.onLine;
+    if (!reachable) {
+        showAlert('The server is not reachable right now - nothing can be synced.', 'warning');
         return;
     }
 
@@ -145,6 +171,7 @@ async function doSync() {
     try {
         const result = await syncOfflineQueue();
         await refreshPendingCount();
+        reportAbnormalReadings(result);
 
         if (result.failed > 0) {
             showAlert(

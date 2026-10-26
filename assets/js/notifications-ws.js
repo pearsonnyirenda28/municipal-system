@@ -44,6 +44,11 @@
             if (data.type === 'notifications') {
                 applyUpdate(data);
             }
+            if (data.type === 'auth_error') {
+                // The server no longer accepts this session (it timed out, or the account was
+                // deactivated). Stop reconnecting in a loop; the next page load goes to login.
+                authFailed = true;
+            }
             // type 'auth_error' -> session isn't valid from the server's
             // point of view (e.g. it expired). Nothing to do client-side;
             // the next real page load will bounce to the login page via
@@ -54,7 +59,10 @@
         socket.addEventListener('error', function () { socket.close(); });
     }
 
+    var authFailed = false;
+
     function scheduleReconnect() {
+        if (authFailed) { return; }
         setTimeout(connect, backoff);
         backoff = Math.min(backoff * 2, MAX_BACKOFF);
     }

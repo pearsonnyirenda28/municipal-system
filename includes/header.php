@@ -25,7 +25,7 @@ $menus = [
                             ['wards/list.php', 'Wards'], ['houses/list.php', 'Houses'],
                             ['reports/index.php', 'Reports'], ['users/list.php', 'Users'],
                             ['backup.php', 'Backups'], ['error_log_viewer.php', 'Error Log'],
-                            ['sync/conflicts.php', 'Sync Conflicts'],
+                            ['sync/conflicts.php', 'Sync Conflicts'], ['sync/status.php', 'Sync Status'],
                             ['profile.php', 'My Account']],
     'Officer'          => [['dashboard.php', 'Dashboard'], ['cases/list.php', 'Cases'], ['fines/list.php', 'Fines'],
                             ['profile.php', 'My Account']],
@@ -58,6 +58,8 @@ $myMenu = array_values(array_filter(
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="csrf-token" content="<?= htmlspecialchars(csrfToken(), ENT_QUOTES) ?>">
+<meta name="current-user-id" content="<?= (int) ($_SESSION['user_id'] ?? 0) ?>">
 <title><?= htmlspecialchars(APP_NAME) ?></title>
 <link rel="stylesheet" href="/municipal-system/assets/css/style.css">
 

@@ -21,10 +21,10 @@
  *     entry, separate from plain capture.php.
  *   - Does NOT intercept any POST request or anything under /api/ - all
  *     of that is left to the network exactly as before, and the offline
- *     queue in offline-queue.js handles the fallback when it fails.
+ *     queue in offline-db-sqlite.js handles the fallback when it fails.
  */
 
-const CACHE_VERSION = 'municipal-shell-v2';   // bumped to force a fresh install
+const CACHE_VERSION = 'municipal-shell-v4';   // bumped: purges the stale offline-queue.js and old cached pages
 const BASE = '/municipal-system';
 
 const PRECACHE_URLS = [
@@ -33,7 +33,9 @@ const PRECACHE_URLS = [
     `${BASE}/assets/css/style.css`,
     `${BASE}/assets/js/nav.js`,
     `${BASE}/assets/js/connectivity.js`,
-    `${BASE}/assets/js/offline-queue.js`,
+    `${BASE}/assets/js/offline-db-sqlite.js`,
+    `${BASE}/assets/vendor/sql-wasm.js`,
+    `${BASE}/assets/vendor/sql-wasm.wasm`,
     `${BASE}/assets/js/meter-reading.js`,
     `${BASE}/assets/js/status-actions.js`,
     `${BASE}/assets/js/fine-issue.js`,

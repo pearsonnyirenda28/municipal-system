@@ -128,26 +128,57 @@ function getReaderRound(PDO $db, ?array $wardIds, int $readerId, string $date): 
  * A plain check-then-insert-or-update rather than SQLite's
  * "ON CONFLICT" or MySQL's "ON DUPLICATE KEY" - avoids yet another pair
  * of driver-specific SQL dialects for one simple operation.
+ *
+ * Version 4.5: callers that want this write pushed on to the central
+ * Workspace Server pass $syncId/$deviceId (see
+ * includes/local_store.php::resolveSyncId) and then call
+ * enqueueForCentralSync() themselves right afterwards, in the same
+ * transaction - this function only owns the HouseVisits row itself,
+ * not the outbox entry, so includes/db.php doesn't need to depend on
+ * includes/local_store.php (which depends on this file). See
+ * api/mark_visit.php / api/save_reading.php for the call sites that
+ * do this. A visit's status changes several times over a day
+ * (Pending -> Skipped -> ...), so each call should be given a FRESH
+ * sync_id representing "sync this new state" - unlike MeterReadings/
+ * Fines, which are append-only and keep one sync_id for life. Callers
+ * that don't pass $syncId (damaged-meters/report.php;
+ * meter-readings/mark_status.php, which nothing links to any more)
+ * leave the sync columns untouched - that write simply isn't pushed
+ * to the center, matching those flows' existing (documented)
+ * offline/central-sync scope.
  */
-function upsertHouseVisit(PDO $db, int $houseId, int $readerId, string $date, string $status, ?int $readingId = null, ?string $notes = null): void
+function upsertHouseVisit(PDO $db, int $houseId, int $readerId, string $date, string $status, ?int $readingId = null, ?string $notes = null, ?string $syncId = null, ?string $deviceId = null): int
 {
     $check = $db->prepare('SELECT visit_id FROM HouseVisits WHERE house_id = :h AND reader_id = :r AND visit_date = :d');
     $check->execute(['h' => $houseId, 'r' => $readerId, 'd' => $date]);
     $existing = $check->fetch();
 
     if ($existing) {
-        $stmt = $db->prepare(
-            'UPDATE HouseVisits SET status = :status, reading_id = :reading_id, notes = :notes, updated_at = CURRENT_TIMESTAMP
-             WHERE visit_id = :id'
-        );
-        $stmt->execute(['status' => $status, 'reading_id' => $readingId, 'notes' => $notes, 'id' => $existing['visit_id']]);
+        $visitId = (int) $existing['visit_id'];
+        $sql = 'UPDATE HouseVisits SET status = :status, reading_id = :reading_id, notes = :notes, updated_at = CURRENT_TIMESTAMP';
+        $params = ['status' => $status, 'reading_id' => $readingId, 'notes' => $notes, 'id' => $visitId];
+        if ($syncId !== null) {
+            $sql .= ', sync_id = :sync_id, device_id = :device_id, sync_status = \'PENDING\', synced_at = NULL';
+            $params['sync_id'] = $syncId;
+            $params['device_id'] = $deviceId;
+        }
+        $sql .= ' WHERE visit_id = :id';
+        $db->prepare($sql)->execute($params);
     } else {
-        $stmt = $db->prepare(
-            'INSERT INTO HouseVisits (house_id, reader_id, visit_date, status, reading_id, notes)
-             VALUES (:h, :r, :d, :status, :reading_id, :notes)'
-        );
-        $stmt->execute(['h' => $houseId, 'r' => $readerId, 'd' => $date, 'status' => $status, 'reading_id' => $readingId, 'notes' => $notes]);
+        $columns = '(house_id, reader_id, visit_date, status, reading_id, notes)';
+        $placeholders = '(:h, :r, :d, :status, :reading_id, :notes)';
+        $params = ['h' => $houseId, 'r' => $readerId, 'd' => $date, 'status' => $status, 'reading_id' => $readingId, 'notes' => $notes];
+        if ($syncId !== null) {
+            $columns = '(house_id, reader_id, visit_date, status, reading_id, notes, sync_id, device_id, sync_status)';
+            $placeholders = "(:h, :r, :d, :status, :reading_id, :notes, :sync_id, :device_id, 'PENDING')";
+            $params['sync_id'] = $syncId;
+            $params['device_id'] = $deviceId;
+        }
+        $db->prepare("INSERT INTO HouseVisits {$columns} VALUES {$placeholders}")->execute($params);
+        $visitId = (int) $db->lastInsertId();
     }
+
+    return $visitId;
 }
 
 function getDb(): PDO

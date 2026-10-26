@@ -9,7 +9,6 @@ if (!empty($_SESSION['user_id'])) {
     logActivity($_SESSION['user_id'], 'Logged out');
 }
 
-session_unset();
-session_destroy();
+endSession();   // empties the session, expires the cookie, destroys the server-side data
 header('Location: login.php');
 exit;

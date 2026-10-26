@@ -18,8 +18,15 @@ if (!empty($_SESSION['user_id'])) {
 }
 
 $error = '';
-if (!empty($_GET['timeout'])) {
-    $error = 'You were logged out after 15 minutes of inactivity. Please log in again.';
+$reason = (string) ($_GET['reason'] ?? (!empty($_GET['timeout']) ? 'timeout' : ''));
+if ($reason === 'timeout') {
+    $mins = SESSION_TIMEOUT_SECONDS / 60;
+    $after = $mins >= 1 ? round($mins) . ' minute' . (round($mins) == 1 ? '' : 's') : SESSION_TIMEOUT_SECONDS . ' seconds';
+    $error = "You were logged out after {$after} of inactivity. Please log in again.";
+} elseif ($reason === 'deactivated') {
+    $error = 'Your account has been deactivated. Please contact the system administrator.';
+} elseif ($reason === 'password_changed') {
+    $error = 'Your password was changed, so you have been logged out. Please log in with the new password.';
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -38,19 +45,30 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $stmt->execute(['username' => $username]);
         $user = $stmt->fetch();
 
-        if ($user && password_verify($password, $user['password_hash'])) {
+        // Always run exactly one bcrypt comparison, even for a username that does not exist
+        // (against a throw-away hash), so the response time never reveals which usernames are real.
+        $hash       = $user ? (string) $user['password_hash'] : '$2y$10$xTeHfnb8oN8r8Q5EExtIg.5kACY1LX9GWy8d1m8iKZFVyjxjAMpda';
+        $passwordOk = password_verify($password, $hash) && $user;
+
+        if ($passwordOk && array_key_exists('is_active', $user) && $user['is_active'] !== null && (int) $user['is_active'] === 0) {
+            // Correct password, but an administrator has deactivated the account.
+            logActivity((int) $user['user_id'], 'Login refused: account is deactivated');
+            $error = 'This account has been deactivated. Please contact the system administrator.';
+        } elseif ($passwordOk) {
             clearFailedLogins($username);
-            session_regenerate_id(true);
+            session_regenerate_id(true);           // new session ID at the moment of login (session fixation)
+            unset($_SESSION['csrf_token']);        // and a fresh CSRF token for the new login
             $_SESSION['user_id']        = $user['user_id'];
             $_SESSION['full_name']      = $user['full_name'];
             $_SESSION['role']           = $user['role'];
             $_SESSION['last_activity']  = time();
+            $_SESSION['revalidated_at'] = time();
+            $_SESSION['pw_fingerprint'] = sessionFingerprint((string) $user['password_hash']);
             logActivity($user['user_id'], 'Logged in');
             header('Location: dashboard.php');
             exit;
         } else {
-            recordFailedLogin($username);
-            logActivity(null, "Failed login attempt for username '{$username}'");
+            recordFailedLogin($username);          // also writes the audit-log entry
             $error = 'Invalid username or password.';
         }
     }
@@ -106,5 +124,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     </div>
 
     <script src="/municipal-system/assets/js/password-toggle.js"></script>
+<script src="/municipal-system/assets/js/auth-cleanup.js"></script>
 </body>
 </html>

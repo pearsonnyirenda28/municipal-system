@@ -77,23 +77,59 @@ function resolveDbPath(string $path): string
 }
 
 // ------------------------------------------------------------
-// Central database / workstation sync settings (Version 4.x).
+// Workstation <-> central Workspace Server sync (Version 4.5).
 //
-// These back the local resilience layer in includes/local_store.php
-// and the CLI sync worker cli_sync_engine.php. Read them from .env -
-// the defaults are safe for a single-workstation SQLite install (they
-// simply make the sync engine a no-op until a real central server is
-// configured).
+// This app can run in two roles, from the same codebase:
+//   - Field workstation: DB_DRIVER=sqlite (the default). getDb() IS
+//     the "Local SQLite" of the architecture - every page already
+//     reads/writes it directly, so nothing further is needed to make
+//     local persistence "first". cli_sync_engine.php then runs
+//     alongside it as a background process, pushing this
+//     workstation's pending records (includes/local_store.php) to
+//     CENTRAL_SERVER_URL and pulling master data back down.
+//   - Workspace Server: DB_DRIVER=mysql. The same getDb() now points
+//     at the central MySQL, and this instance additionally exposes
+//     api/sync_push.php / api/sync_pull.php for workstations to call.
+//
+// Defaults are safe for a single-workstation install with no central
+// server configured yet: CENTRAL_SERVER_URL is blank, so
+// cli_sync_engine.php has nothing to talk to and simply idles.
 // ------------------------------------------------------------
-define('LOCAL_SQLITE_PATH', env('LOCAL_SQLITE_PATH', 'data/municipal_local.sqlite'));
 define('DEVICE_ID', env('DEVICE_ID', 'WORKSTATION-01'));
 define('CENTRAL_SERVER_URL', env('CENTRAL_SERVER_URL', ''));
+
+// Shared secret both sides must agree on for workstation <-> Workspace
+// Server traffic (api/sync_push.php, api/sync_pull.php). This is
+// machine-to-machine traffic with no browser session/CSRF token behind
+// it, so without this anyone who can reach the Workspace Server's
+// sync endpoints over the LAN could write directly into the central
+// MySQL. Blank by default (safe for a workstation that isn't
+// configured to sync anywhere yet) - set the SAME value in .env on
+// every workstation and on the Workspace Server before pointing
+// CENTRAL_SERVER_URL anywhere real.
+define('SYNC_API_KEY', env('SYNC_API_KEY', ''));
+
+// Tunables for cli_sync_engine.php - safe to leave at their defaults.
+define('SYNC_BATCH_SIZE', (int) env('SYNC_BATCH_SIZE', 50));
+define('SYNC_POLL_SECONDS', (int) env('SYNC_POLL_SECONDS', 5));
+define('SYNC_PULL_EVERY_N_POLLS', (int) env('SYNC_PULL_EVERY_N_POLLS', 12)); // ~every 60s at the default poll interval
+define('SYNC_MAX_ATTEMPTS', (int) env('SYNC_MAX_ATTEMPTS', 8));
 
 define('APP_NAME', env('APP_NAME', 'Municipal Police and Meter Reading Management System'));
 define('APP_ENV', env('APP_ENV', 'local'));
 
-// Session settings - 15 minute idle timeout, matching Activity 4, Section 5.2
-define('SESSION_TIMEOUT_SECONDS', 15 * 60);
+// Session settings. The idle timeout defaults to 15 minutes (Activity 4, Section 5.2);
+// SESSION_TIMEOUT_MINUTES in .env overrides it (a small value such as 1 is handy for
+// demonstrating the timeout).
+define('SESSION_TIMEOUT_SECONDS', max(1, (int) round(((float) env('SESSION_TIMEOUT_MINUTES', 15)) * 60)));
+// How often (seconds) a live session is re-checked against the Users table, so that
+// deactivating an account, changing its role or changing its password takes effect on
+// sessions that are already open. 0 = check on every request.
+define('SESSION_REVALIDATE_SECONDS', max(0, (int) env('SESSION_REVALIDATE_SECONDS', 30)));
+// App-specific session cookie name. The PHP default, "PHPSESSID", is shared by every PHP
+// app on the same host, and two apps then read and overwrite each other's session data.
+// ws/WebSocketServer.php reads this same constant to find the session file.
+define('SESSION_COOKIE_NAME', 'MUNICIPAL_SESSID');
 
 // Reserved for future use (Chapter 7, Section 5.0 - Future Plans): an SMS
 // gateway key or similar would go here, read the same way as everything

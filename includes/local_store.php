@@ -1,105 +1,43 @@
 <?php
 /**
  * includes/local_store.php
- * Local Workstation SQLite Safety & Resilience Layer.
- * Handles primary local persistence and local transactional queueing.
+ * Workstation-tier local-first sync layer (Version 4.5).
+ *
+ * getLocalDb() is an explicit alias for getDb() (includes/db.php): on
+ * a field workstation (DB_DRIVER=sqlite, the default) that connection
+ * already IS this workstation's "Local SQLite" - every page already
+ * reads and writes it directly. This file adds exactly one thing on
+ * top of that: an outbox (LocalSyncQueue) that api/save_reading.php,
+ * api/save_fine.php and api/mark_visit.php write to, in the same
+ * transaction as their normal insert/update, so cli_sync_engine.php
+ * has something to push to the central Workspace Server.
+ *
+ * (An earlier version of this file opened a SECOND, separate SQLite
+ * file - data/municipal_local.sqlite - with its own shadow copies of
+ * MeterReadings/Fines/HouseVisits. Nothing in the app ever wrote to
+ * that copy, so it never held real data and the page that displayed
+ * it (meter_readings.php) was always empty. Version 4.5 removes that
+ * split: there is one local database per workstation, the same one
+ * every other page already uses - see schema.sql for the sync_id /
+ * device_id / sync_status / synced_at columns added directly to the
+ * real tables, and the LocalSyncQueue / SyncEngineState tables.)
  */
 
 declare(strict_types=1);
 
-require_once __DIR__ . '/../config.php';
+require_once __DIR__ . '/db.php';
 
-/**
- * Singleton database connection wrapper for the local SQLite database.
- *
- * @return PDO
- */
-function getLocalDb(): PDO {
-    static $localPdo = null;
-
-    if ($localPdo === null) {
-        $dbPath = resolveDbPath(LOCAL_SQLITE_PATH);
-        $dir = dirname($dbPath);
-
-        if (!is_dir($dir)) {
-            mkdir($dir, 0755, true);
-        }
-
-        $localPdo = new PDO("sqlite:{$dbPath}", null, null, [
-            PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
-            PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-        ]);
-
-        // Enable write-ahead logging (WAL) for concurrency resilience
-        $localPdo->exec("PRAGMA journal_mode = WAL;");
-
-        // Initialize local queue schema
-        $localPdo->exec("
-            CREATE TABLE IF NOT EXISTS LocalSyncQueue (
-                queue_id INTEGER PRIMARY KEY AUTOINCREMENT,
-                sync_id TEXT NOT NULL UNIQUE,
-                table_name TEXT NOT NULL,
-                operation TEXT NOT NULL DEFAULT 'INSERT',
-                payload TEXT NOT NULL,
-                status TEXT NOT NULL DEFAULT 'PENDING',
-                error_message TEXT NULL,
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-            );
-            CREATE INDEX IF NOT EXISTS idx_queue_status ON LocalSyncQueue(status);
-
-            CREATE TABLE IF NOT EXISTS MeterReadings (
-                reading_id INTEGER PRIMARY KEY AUTOINCREMENT,
-                sync_id TEXT NOT NULL UNIQUE,
-                device_id TEXT NOT NULL,
-                house_id INTEGER NOT NULL,
-                reader_id INTEGER NOT NULL,
-                previous_reading REAL NOT NULL DEFAULT 0.00,
-                current_reading REAL NOT NULL,
-                reading_date DATETIME DEFAULT CURRENT_TIMESTAMP,
-                sync_status TEXT NOT NULL DEFAULT 'PENDING',
-                synced_at DATETIME NULL,
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-            );
-
-            CREATE TABLE IF NOT EXISTS Fines (
-                fine_id INTEGER PRIMARY KEY AUTOINCREMENT,
-                sync_id TEXT NOT NULL UNIQUE,
-                device_id TEXT NOT NULL,
-                house_id INTEGER NOT NULL,
-                issuer_id INTEGER NOT NULL,
-                reason TEXT NOT NULL,
-                amount REAL NOT NULL,
-                issued_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                sync_status TEXT NOT NULL DEFAULT 'PENDING',
-                synced_at DATETIME NULL,
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-            );
-
-            CREATE TABLE IF NOT EXISTS HouseVisits (
-                visit_id INTEGER PRIMARY KEY AUTOINCREMENT,
-                sync_id TEXT NOT NULL UNIQUE,
-                device_id TEXT NOT NULL,
-                house_id INTEGER NOT NULL,
-                officer_id INTEGER NOT NULL,
-                notes TEXT NOT NULL,
-                visited_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                sync_status TEXT NOT NULL DEFAULT 'PENDING',
-                synced_at DATETIME NULL,
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-            );
-        ");
-    }
-
-    return $localPdo;
+/** The workstation's local database - see the file header above. */
+function getLocalDb(): PDO
+{
+    return getDb();
 }
 
 /**
  * Generates a pseudo-random UUID v4 string for globally unique sync IDs.
- *
- * @return string
  */
-function generateSyncId(): string {
+function generateSyncId(): string
+{
     $data = random_bytes(16);
     $data[6] = chr(ord($data[6]) & 0x0f | 0x40);
     $data[8] = chr(ord($data[8]) & 0x3f | 0x80);
@@ -107,54 +45,129 @@ function generateSyncId(): string {
 }
 
 /**
- * Atomically writes transaction to local SQLite storage and enqueues sync request.
- *
- * @param string $tableName Destination SQLite table name.
- * @param array $data Record data key-value array.
- * @return string Generated sync_id string.
- * @throws Exception
+ * A row's sync_id is its idempotency key against the central Workspace
+ * Server. When the browser's offline queue already gave this row a
+ * client_ref, that's the natural choice - it's already unique, and it
+ * means the row's identity is the same string end-to-end (browser to
+ * workstation to central MySQL) instead of two unrelated tokens.
+ * Otherwise (JS disabled, or a write path that doesn't queue) there is
+ * no client_ref yet, so generate a fresh sync_id here.
  */
-function saveLocalTransaction(string $tableName, array $data): string {
-    $db = getLocalDb();
-    $syncId = generateSyncId();
-    $deviceId = DEVICE_ID;
-    $now = date('Y-m-d H:i:s');
+function resolveSyncId(?string $clientRef = null): string
+{
+    $clientRef = trim((string) $clientRef);
+    return $clientRef !== '' ? $clientRef : generateSyncId();
+}
 
+/**
+ * Queues one row for the central Workspace Server. Call this between
+ * $db->beginTransaction() and $db->commit(), right after the
+ * INSERT/UPDATE it's queuing for - if the transaction rolls back, the
+ * queue entry rolls back with it, so a row can never exist locally
+ * without being queued, or be queued without existing (principle:
+ * transactional integrity).
+ *
+ * sync_id and device_id are set here (not left to the caller) so
+ * every queued row is guaranteed to carry both correctly.
+ *
+ * @param PDO    $db        The same connection/transaction as the caller.
+ * @param string $syncId    From resolveSyncId().
+ * @param string $tableName One of the tables api/sync_push.php recognises (MeterReadings, Fines, HouseVisits).
+ * @param string $operation 'INSERT' for append-only rows, 'UPSERT' for rows that get updated in place (HouseVisits).
+ * @param array  $data      The row's syncable fields, central-table column names => values.
+ */
+function enqueueForCentralSync(PDO $db, string $syncId, string $tableName, string $operation, array $data): void
+{
     $data['sync_id'] = $syncId;
-    $data['device_id'] = $deviceId;
-    $data['sync_status'] = 'PENDING';
-    $data['created_at'] = $now;
+    $data['device_id'] = DEVICE_ID;
 
-    $db->beginTransaction();
-    try {
-        // 1. Dynamic Local Insert
-        $columns = array_keys($data);
-        $colList = implode(', ', array_map(fn($c) => "`{$c}`", $columns));
-        $placeholders = implode(', ', array_map(fn($c) => ":{$c}", $columns));
+    $stmt = $db->prepare(
+        "INSERT INTO LocalSyncQueue (sync_id, table_name, operation, payload, status, created_at, updated_at)
+         VALUES (:sync_id, :table_name, :operation, :payload, 'PENDING', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)"
+    );
+    $stmt->execute([
+        'sync_id'    => $syncId,
+        'table_name' => $tableName,
+        'operation'  => $operation,
+        'payload'    => json_encode($data, JSON_THROW_ON_ERROR),
+    ]);
+}
 
-        $stmt = $db->prepare("INSERT INTO `{$tableName}` ({$colList}) VALUES ({$placeholders})");
-        $stmt->execute($data);
+/**
+ * How many rows on this workstation are still waiting to reach the
+ * central Workspace Server (queued or currently mid-push).
+ */
+function countPendingCentralSync(PDO $db): int
+{
+    return (int) $db->query("SELECT COUNT(*) FROM LocalSyncQueue WHERE status IN ('PENDING','SYNCING')")->fetchColumn();
+}
 
-        // 2. Queue for Central Sync
-        $queueStmt = $db->prepare("
-            INSERT INTO LocalSyncQueue (sync_id, table_name, operation, payload, status, created_at, updated_at)
-            VALUES (:sync_id, :table_name, 'INSERT', :payload, 'PENDING', :created_at, :updated_at)
-        ");
-        $queueStmt->execute([
-            'sync_id' => $syncId,
-            'table_name' => $tableName,
-            'payload' => json_encode($data, JSON_THROW_ON_ERROR),
-            'created_at' => $now,
-            'updated_at' => $now
-        ]);
+// ── SyncEngineState helpers ─────────────────────────────────────────
+//
+// cli_sync_engine.php runs as a separate OS process from the web
+// server, so it can't just hold its status in a PHP variable -
+// anything asking "is this workstation currently synchronized with
+// the Workspace Server?" (sync/status.php today, potentially a
+// dashboard widget later) needs to read it back from somewhere.
+// SyncEngineState is a single row (id=1) the engine keeps current.
+//
+// States (the network-abstraction principle, applied at the
+// workstation <-> Workspace Server tier - connectivity.js applies the
+// same vocabulary one level up, at the browser <-> workstation tier):
+//   WORKSPACE_UNAVAILABLE - CENTRAL_SERVER_URL isn't reachable right now
+//   SYNCING                - a push or pull is in flight
+//   SYNCHRONIZED            - reachable, and the queue is fully drained
+//   ONLINE                  - reachable, but records are still pending
+//   SYNC_ERROR              - reachable, but the server rejected the last attempt
 
-        $db->commit();
-        return $syncId;
+const SYNC_ENGINE_STATES = ['WORKSPACE_UNAVAILABLE', 'ONLINE', 'SYNCING', 'SYNCHRONIZED', 'SYNC_ERROR'];
 
-    } catch (Throwable $e) {
-        if ($db->inTransaction()) {
-            $db->rollBack();
-        }
-        throw $e;
+/**
+ * @param array $fields Any of last_push_attempt_at / last_push_success_at /
+ *                       last_pull_attempt_at / last_pull_success_at / last_error.
+ *                       Pass CURRENT_TIMESTAMP-style values as PHP date('Y-m-d H:i:s') strings.
+ */
+function setSyncEngineState(PDO $db, string $state, array $fields = []): void
+{
+    if (!in_array($state, SYNC_ENGINE_STATES, true)) {
+        throw new InvalidArgumentException("Unknown sync engine state: {$state}");
     }
+    $allowedFields = ['last_push_attempt_at', 'last_push_success_at', 'last_pull_attempt_at', 'last_pull_success_at', 'last_error'];
+
+    $set = ['state = :state', 'updated_at = CURRENT_TIMESTAMP'];
+    $params = ['state' => $state];
+    foreach ($fields as $key => $value) {
+        if (!in_array($key, $allowedFields, true)) {
+            continue;
+        }
+        $set[] = "{$key} = :{$key}";
+        $params[$key] = $value;
+    }
+
+    $db->prepare('UPDATE SyncEngineState SET ' . implode(', ', $set) . ' WHERE id = 1')->execute($params);
+}
+
+function getSyncEngineState(PDO $db): array
+{
+    $row = $db->query('SELECT * FROM SyncEngineState WHERE id = 1')->fetch();
+    return $row ?: ['state' => 'WORKSPACE_UNAVAILABLE'];
+}
+
+/**
+ * Heuristic for sync/status.php: the engine touches SyncEngineState.
+ * updated_at on every poll (SYNC_POLL_SECONDS, default 5s) regardless
+ * of whether there was anything to push - a stale timestamp beyond a
+ * couple of minutes means the process itself isn't running (crashed,
+ * never started, machine rebooted without the service re-registering),
+ * as distinct from it running but simply unable to reach the
+ * Workspace Server (that's WORKSPACE_UNAVAILABLE, a state the row
+ * would still be getting updated to).
+ */
+function isSyncEngineRunning(PDO $db): bool
+{
+    $updatedAt = $db->query('SELECT updated_at FROM SyncEngineState WHERE id = 1')->fetchColumn();
+    if (!$updatedAt) {
+        return false;
+    }
+    return (time() - strtotime($updatedAt)) < 120;
 }

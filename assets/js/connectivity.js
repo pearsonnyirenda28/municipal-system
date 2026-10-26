@@ -5,6 +5,52 @@
  * Wrapped in an IIFE so the constants and functions inside are scoped to
  * this module and cannot collide if the file is accidentally loaded twice.
  */
+// Fallback: give the sync layer its CSRF token from the <meta> tag if the page's
+// inline <script> did not run (for example because a stricter CSP blocked it).
+(function () {
+    if (!window.CSRF_TOKEN) {
+        var m = document.querySelector('meta[name="csrf-token"]');
+        if (m && m.content) { window.CSRF_TOKEN = m.content; }
+    }
+    // Who is logged in - used by the offline queue so one user's saved records are never
+    // sent under another user's login on a shared computer.
+    if (!window.CURRENT_USER_ID) {
+        var u = document.querySelector('meta[name="current-user-id"]');
+        if (u && u.content) { window.CURRENT_USER_ID = parseInt(u.content, 10); }
+    }
+})();
+
+// Tells the user when a sync pass found something they need to act on. The records
+// themselves are never lost: they stay on this device until they can be sent.
+window.addEventListener('queuesynced', function (e) {
+    var d = (e && e.detail) || {};
+    var bar = document.getElementById('syncNoticeBar');
+    var msg = '', link = false;
+    if (d.sessionExpired) {
+        msg = 'Your session has ended, so your saved records have not been sent yet. They are safe on this device. ';
+        link = true;
+    } else if (d.otherUsers > 0) {
+        msg = d.otherUsers + ' saved record' + (d.otherUsers === 1 ? '' : 's') +
+              ' on this device ' + (d.otherUsers === 1 ? 'belongs' : 'belong') + ' to another user and will be sent when that user logs in.';
+    }
+    if (!msg) { if (bar) { bar.parentNode.removeChild(bar); } return; }
+    if (!bar) {
+        bar = document.createElement('div');
+        bar.id = 'syncNoticeBar';
+        bar.setAttribute('role', 'alert');
+        bar.style.cssText = 'position:sticky;top:0;z-index:9999;background:#000;color:#fff;padding:10px 16px;font-size:14px;text-align:center;';
+        document.body.insertBefore(bar, document.body.firstChild);
+    }
+    bar.textContent = msg;
+    if (link) {
+        var a = document.createElement('a');
+        a.href = '/municipal-system/login.php';
+        a.textContent = 'Log in again';
+        a.style.cssText = 'color:#fff;font-weight:bold;text-decoration:underline;';
+        bar.appendChild(a);
+    }
+});
+
 (function () {
     'use strict';
 

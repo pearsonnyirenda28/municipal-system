@@ -10,21 +10,12 @@
  * Duplicate handling mirrors api/save_reading.php exactly, for the same
  * reasons - see that file's header comment for the full rationale.
  */
-require_once __DIR__ . '/../includes/db.php';
+require_once __DIR__ . '/../includes/local_store.php';
 require_once __DIR__ . '/../includes/auth.php';
 
 header('Content-Type: application/json');
 
-if (empty($_SESSION['user_id'])) {
-    http_response_code(401);
-    echo json_encode(['success' => false, 'message' => 'Not logged in.']);
-    exit;
-}
-if (!in_array($_SESSION['role'], ['Admin', 'Officer'], true)) {
-    http_response_code(403);
-    echo json_encode(['success' => false, 'message' => 'You do not have permission to do this.']);
-    exit;
-}
+requireApiLogin(['Admin', 'Officer']);   // 401 + code on an ended session, 403 on the wrong role, 409 on another user's records
 
 verifyCsrfHeader();
 
@@ -94,13 +85,17 @@ try {
     $nextNumber = $last ? ((int) substr($last, -4)) + 1 : 1;
     $fineNumber = sprintf('FINE-%s-%04d', $year, $nextNumber);
 
+    // Version 4.5: this row's idempotency key against the central
+    // Workspace Server (see includes/local_store.php::resolveSyncId).
+    $syncId = resolveSyncId($clientRef);
+
     $stmt = $db->prepare(
         'INSERT INTO Fines (fine_number, case_id, offender_name, house_number, vehicle_plate,
                              offence_type, amount, payment_status, issued_by, date_issued, client_ref,
-                             is_duplicate_flagged)
+                             is_duplicate_flagged, sync_id, device_id, sync_status)
          VALUES (:fine_number, :case_id, :offender_name, :house_number, :vehicle_plate,
                  :offence_type, :amount, "Unpaid", :issued_by, :date_issued, :client_ref,
-                 :is_duplicate)'
+                 :is_duplicate, :sync_id, :device_id, \'PENDING\')'
     );
     $stmt->execute([
         'fine_number'   => $fineNumber,
@@ -114,6 +109,8 @@ try {
         'date_issued'   => $dateIssued,
         'client_ref'    => $clientRef,
         'is_duplicate'  => $possibleDuplicate ? 1 : 0,
+        'sync_id'       => $syncId,
+        'device_id'     => DEVICE_ID,
     ]);
     $newFineId = (int) $db->lastInsertId();
 
@@ -125,6 +122,29 @@ try {
         $db->prepare("UPDATE Fines SET is_duplicate_flagged = 1 WHERE fine_id IN ({$placeholders})")
            ->execute($existingDuplicateIds);
     }
+
+    // Queue this row for the central Workspace Server - same transaction
+    // as the insert above. case_id is deliberately left out of the
+    // payload: it is a LOCAL autoincrement into this workstation's own
+    // Cases table, and Cases doesn't participate in central sync yet
+    // (see README) - pushing it as-is would either point at the wrong
+    // case centrally or fail outright on the FOREIGN KEY constraint if
+    // no case with that id exists there. The fine itself still syncs;
+    // only its case link is deferred until Cases gets the same sync_id
+    // treatment.
+    enqueueForCentralSync($db, $syncId, 'Fines', 'INSERT', [
+        'fine_number'          => $fineNumber,
+        'offender_name'        => $offenderName,
+        'house_number'         => $houseNumber ?: null,
+        'vehicle_plate'        => $vehiclePlate ?: null,
+        'offence_type'         => $offenceType,
+        'amount'               => $amount,
+        'payment_status'       => 'Unpaid',
+        'issued_by'            => $_SESSION['user_id'],
+        'date_issued'          => $dateIssued,
+        'client_ref'           => $clientRef,
+        'is_duplicate_flagged' => $possibleDuplicate ? 1 : 0,
+    ]);
 
     $db->commit();
 
